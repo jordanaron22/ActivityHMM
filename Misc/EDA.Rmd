@@ -1,0 +1,547 @@
+---
+title: "EDA"
+output: html_document
+date: "2022-11-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(foreign)
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+library(scales)
+library(lubridate)
+library(reshape2)
+require(gridExtra)
+
+# acth_full <- read.xport("Raw Data/PAXMIN_H.XPT")
+# gc()
+# ### most people have 11529 minutes of follow up
+# ### 30 people have 11530 minutes of follow up
+# ### Delete extra minute for those people before we pivot wider to save space
+# 
+# ### Old testing
+# # sum(seqn_count$Count == 11530)
+# # exminind <- which(acth_full$PAXSSNMP %/% 4800 == 11529)
+# # exminseqn1 <- acth_full$SEQN[exminind[1]]
+# 
+# ### Delets extra minute
+# ### Dim difference between acth and acth_full is 30 (sanity check)
+# ###sum(acth$PAXSSNMP %% 4800) is 0 meaning can use PAXXSNMP as index for now
+# acth <- acth_full %>% mutate(minind = (PAXSSNMP %/% 4800) + 1)
+# acth <- acth %>% subset(minind != 11530)
+# 
+# seqn_list <- unique(acth$SEQN)
+# 
+# rm(acth_full)
+# gc()
+# 
+# NHANESWideToLongHelper <- function(acth, var_name, seqn){
+#   # act_sub <- acth %>% select(SEQN, PAXDAYM, PAXDAYWM, all_of(var_name),minind)
+#   
+#   working_act_sub <- acth %>% select(SEQN, PAXDAYM, PAXDAYWM, all_of(var_name),minind) %>% filter(SEQN == seqn)
+#   days_rec <- unique(working_act_sub$PAXDAYM)
+#   
+#   first_day_time <- sum(working_act_sub$PAXDAYM == 1)
+#   last_day_time <- sum(working_act_sub$PAXDAYM == days_rec[length(days_rec)])
+#   
+#   if (length(days_rec) > 1){
+#     min_index <- c(seq(from = (1440 - first_day_time + 1), to = 1440),
+#                    rep(seq(1,1440),(length(days_rec)-2)),
+#                    seq(1,last_day_time))
+#   } else if (length(days_rec) == 1) {
+#     min_index <- c(seq(from = (1440 - first_day_time + 1), to = 1440))
+#   }
+#   
+#   working_act_sub <- working_act_sub %>% mutate(min_index = min_index)
+#   
+#   long_act_ind <- pivot_wider(working_act_sub, id_cols = c(SEQN,PAXDAYM), names_from = c(min_index), values_from = all_of(var_name))
+#   
+#   if (length(days_rec) == 2){
+#     cols_to_add <- seq(last_day_time + 1, 1440 - first_day_time)
+#     df_to_add <- data.frame(V1 = rep(NA,length(cols_to_add)),
+#                             V2 = rep(NA,length(cols_to_add)))
+#     rownames(df_to_add) <- cols_to_add
+#     long_act_ind <- cbind(long_act_ind,t(df_to_add))
+#     
+#   } else if (length(days_rec) == 1){
+#     cols_to_add <- seq(1, 1440 - first_day_time)
+#     df_to_add <- data.frame(V1 = rep(NA,length(cols_to_add)))
+#     rownames(df_to_add) <- cols_to_add
+#     long_act_ind <- cbind(long_act_ind,t(df_to_add))
+#   }
+#   
+#   long_act_ind <- long_act_ind[,c(colnames(long_act_ind)[1:2],paste0(seq(1,1440)))]
+#   
+#   
+#   return(long_act_ind)
+# }
+# 
+# LongIndToViz <- function(long_act_ind){
+#   
+#   stackedval <- t(long_act_ind[1,3:1442])
+#   for (i in 2:9){
+#     stackedval <- rbind(stackedval,t(long_act_ind[i,3:1442]))
+#   }
+#   
+#   long_act_ind_plot <- data.frame(actval = stackedval,
+#                       time = seq(1,1440) / 60,
+#                       day = rep(c(1,2,3,4,5,6,7,8,9),each = 1440))
+#   
+#   return(long_act_ind_plot)
+# }
+# 
+#   
+# long_act_ind <- NHANESWideToLongHelper(acth,"PAXMTSM",seqn_list[3])
+# long_act_ind_plot <- LongIndToViz(long_act_ind)
+# 
+# ggplot(long_act_ind_plot, aes(time,actval)) + 
+#   geom_smooth(aes(group = day)) + 
+#   facet_wrap(~day)
+```
+
+```{r}
+###TO DO 
+# check time of start and end from header matches with current method (aligning data with time in day)
+# header <- read.xport("Raw Data/PAXHD_H.XPT")
+# library(lubridate)
+# 
+# y <- hour(hms(header$PAXFTIME[20])) * 60 + minute(hms(header$PAXFTIME[20]))
+# 
+# x <- 1440 - dim(acth %>% filter(SEQN == 73580 & PAXDAYM == 1))[1]
+# 
+# x == y
+```
+
+```{r}
+load("Data/PAXMTSMG_long.rda")
+acth_long_G <- long_data
+load("Data/PAXMTSMH_long.rda")
+acth_long_H <- long_data
+
+load("Data/PAXLXSDMG_long.rda")
+lux_long_G <- long_data
+load("Data/PAXLXSDMH_long.rda")
+lux_long_H <- long_data
+
+load("Data/PAXQFMG_long.rda")
+flag_long_G <- long_data
+load("Data/PAXQFMH_long.rda")
+flag_long_H <- long_data
+
+load("Data/PAXPREDMG_long.rda")
+pred_long_G <- long_data
+load("Data/PAXPREDMH_long.rda")
+pred_long_H <- long_data
+
+load("Data/PAXAISMMG_long.rda")
+sleepmode_long_G <- long_data
+load("Data/PAXAISMMH_long.rda")
+sleepmode_long_H <- long_data
+
+rm(long_data)
+
+acth_long_G <- as.data.frame(acth_long_G)
+lux_long_G <- as.data.frame(lux_long_G)
+flag_long_G <- as.data.frame(flag_long_G)
+pred_long_G <- as.data.frame(pred_long_G)
+sleepmode_long_G <- as.data.frame(sleepmode_long_G)
+
+acth_long_H <- as.data.frame(acth_long_H)
+lux_long_H <- as.data.frame(lux_long_H)
+flag_long_H <- as.data.frame(flag_long_H)
+pred_long_H <- as.data.frame(pred_long_H)
+sleepmode_long_H <- as.data.frame(sleepmode_long_H)
+
+#Set -.01 values to NA
+acth_long_G[acth_long_G == -.01] <- NA
+acth_long_H[acth_long_H == -.01] <- NA
+
+#FIlter out flags
+#Removed 274027 obs
+flag_long_G[,4:1443] <- !flag_long_G[,4:1443]
+flag_long_G[flag_long_G==F] <- NA
+
+flag_long_H[,4:1443] <- !flag_long_H[,4:1443]
+flag_long_H[flag_long_H==F] <- NA
+
+#Filter our predicted non wear
+#Removes 12091619 obs roughly 14% 
+nonwear_long_G <- pred_long_G
+nonwear_long_G[,4:1443] <- (pred_long_G[,4:1443] !=3 & pred_long_G[,4:1443] !=4)
+nonwear_long_G[nonwear_long_G==F] <- NA
+
+nonwear_long_H <- pred_long_H
+nonwear_long_H[,4:1443] <- (pred_long_H[,4:1443] !=3 & pred_long_H[,4:1443] !=4)
+nonwear_long_H[nonwear_long_H==F] <- NA
+
+#####
+
+
+SumEq1 <- function(vec){return(sum(vec == 1, na.rm = T))}
+SumEq2 <- function(vec){return(sum(vec == 2, na.rm = T))}
+SumEq3 <- function(vec){return(sum(vec == 3, na.rm = T))}
+SumEq4 <- function(vec){return(sum(vec == 4, na.rm = T))}
+SumEqNA <- function(vec){return(sum(is.na(vec)))}
+
+CreateSummaryCatHelper <- function(data_long_ind,sum_len){
+  data_sum_mat <- matrix(as.numeric(data_long_ind),ncol = sum_len, byrow = T)
+  pred_counts <- cbind(apply(data_sum_mat,1,SumEq1),apply(data_sum_mat,1,SumEq2),
+        apply(data_sum_mat,1,SumEq3),apply(data_sum_mat,1,SumEq4),
+        apply(data_sum_mat,1,SumEqNA))
+  
+  colnames(pred_counts) <- c("Wake","Sleep","NonWear","Unknown","NA")
+  return(pred_counts)
+  
+}
+
+CreateSummaryCat <- function(sum_len, wave, exclude_firstlast = F){
+  
+  if(wave == "G"){pred_long <- pred_long_G}
+  if(wave == "H"){pred_long <- pred_long_H}
+  
+  if(exclude_firstlast){
+    pred_long <- pred_long %>% drop_na()
+  }
+  
+  long_pred_inter <- apply(pred_long[,4:1443],1,CreateSummaryCatHelper, sum_len)
+  pred_sums <- matrix(rowSums(long_pred_inter),nrow = 1440/sum_len,byrow = F)
+  colnames(pred_sums) <- c("Wake","Sleep","NonWear","Unknown","NA")
+  
+  row_names <- format( seq.POSIXt(as.POSIXct(Sys.Date()), as.POSIXct(Sys.Date()+1), by = paste(sum_len,"min")),
+            "%H%M", tz="GMT")
+  row_names <- row_names[-1]
+  
+  rownames(pred_sums) <- row_names
+  
+  pred_sums_melt <- melt(pred_sums)
+  colnames(pred_sums_melt) <- c("Time","Type","Total")
+  
+  ts <- seq(as.POSIXct("2017-01-01", tz = "UTC"),
+      as.POSIXct("2017-01-02", tz = "UTC"),
+      by = paste(sum_len,"min"))
+  ts <- ts[-1]
+  
+  pred_sums_melt$Time <- rep(ts,5)
+  
+  return(pred_sums_melt)
+}
+  
+CreateSummaryHelper <- function(data_long_ind,sum_len, mean = F){
+  
+  
+  data_sum_mat <- matrix(unlist(data_long_ind),ncol = sum_len, byrow = T)
+  
+  
+  
+  data_sum <- rowSums(data_sum_mat, na.rm = T) / sum_len
+  
+  return(data_sum)
+}
+
+CreateSummary <- function(sum_len,ex_flag = F, ex_nw = F, wave, exclude_firstlast = 0){
+  
+  ###For each person, summed over sum_len intervals 
+  ###Then took median of each time interval over all people 
+  ###i.e. median amount of light during the hour of 3-4 over all people when sum_len = 60
+  
+  if(wave == "G"){
+    acth_long <- acth_long_G
+    lux_long <- lux_long_G
+    flag_long <- flag_long_G
+    nonwear_long <- nonwear_long_G
+  }
+  
+  if(wave == "H"){
+    acth_long <- acth_long_H
+    lux_long <- lux_long_H
+    flag_long <- flag_long_H
+    nonwear_long <- nonwear_long_H
+  }
+  
+  if(exclude_firstlast == 1){
+    acth_long <- acth_long %>% filter(PAXDAYM != 1 & PAXDAYM != 9)
+    lux_long <- lux_long %>% filter(PAXDAYM != 1 & PAXDAYM != 9)
+    flag_long <- flag_long %>% filter(PAXDAYM != 1 & PAXDAYM != 9)
+    nonwear_long <- nonwear_long %>% filter(PAXDAYM != 1 & PAXDAYM != 9)
+  }
+  
+  if(exclude_firstlast == 2){
+    acth_long <- acth_long %>% filter(PAXDAYM != 1 | PAXDAYM != 9)
+    lux_long <- lux_long %>% filter(PAXDAYM != 1 | PAXDAYM != 9)
+    flag_long <- flag_long %>% filter(PAXDAYM != 1 | PAXDAYM != 9)
+    nonwear_long <- nonwear_long %>% filter(PAXDAYM != 1 | PAXDAYM != 9)
+  }
+  
+  acth_long <- acth_long[,4:1443]
+  lux_long <- lux_long[,4:1443]
+  flag_long <- flag_long[,4:1443]
+  nonwear_long <- nonwear_long[,4:1443]
+  
+  if (ex_flag){
+    acth_long <- acth_long * flag_long
+    lux_long <- lux_long * flag_long
+  }
+  
+  if (ex_nw){
+    acth_long <- acth_long * nonwear_long
+    lux_long <- lux_long * nonwear_long
+  }
+    
+  
+  
+  acth_sum <- apply(acth_long,1,CreateSummaryHelper, sum_len)
+  lux_sum <- apply(lux_long,1,CreateSummaryHelper, sum_len)
+  
+  
+  acth_med_sum <- apply(acth_sum,1,median)
+  lux_med_sum <- apply(lux_sum,1,median)
+  
+  ts <- seq(as.POSIXct("2017-01-01", tz = "UTC"),
+      as.POSIXct("2017-01-02", tz = "UTC"),
+      by = paste(sum_len,"min"))
+  ts <- ts[-1]
+  
+   summary_df <- data.frame(Total = c(acth_med_sum,lux_med_sum),
+                           Type = rep(c("Activity","Light"),each = length(acth_med_sum)),
+                           Time = rep(ts,2))
+   
+   return(summary_df)
+}
+
+CreateLinePlot <- function(data_frame,sum_len,title_to_use){
+  if (title_to_use == 1){
+    title_to_use <- "Median Light and Activity"
+  } else if (title_to_use == 2) {
+    title_to_use <- "Sleep/Wake Prediction"
+  }
+  
+  p <- ggplot(data_frame, aes(x = Time, y = Total, group = Type)) + 
+    geom_line(aes(color = Type)) +
+    scale_x_datetime(breaks = breaks_width("4 hour"),date_labels = "%H:%M") +
+    ggtitle(paste(title_to_use,"Data Summed Over",sum_len,"Minute Inervals"))
+  
+  return(p)
+}
+
+```
+
+```{r, fig.height=6, fig.width=10}
+
+
+act_lux_sum_10_H <- CreateSummary(10,wave = "H")
+act_lux_sum_10_G <- CreateSummary(10,wave = "G")
+
+pred_sums_melt_10_H <- CreateSummaryCat(10,"H")
+pred_sums_melt_10_G <- CreateSummaryCat(10,"G")
+
+pred_sums_melt_10_H_nfl <- CreateSummaryCat(10,"H",T)
+pred_sums_melt_10_G_nfl <- CreateSummaryCat(10,"G",T)
+
+
+# grid.arrange(CreateLinePlot(act_lux_sum_10,10,1),
+#              CreateLinePlot(pred_sums_melt_10 %>% filter(Type == "Wake" | Type == "Sleep"), sum_len = 10,2), ncol = 1)
+
+grid.arrange(CreateLinePlot(act_lux_sum_10_G,60,1) + ylim(0,18) + labs(subtitle = "Wave G"),
+             CreateLinePlot(act_lux_sum_10_H,60,1) + ylim(0,18) + labs(subtitle = "Wave H"),
+             ncol = 1)
+
+grid.arrange(CreateLinePlot(pred_sums_melt_10_G, sum_len = 60,2) + ylim(0,500000) + labs(subtitle = "Wave G"),
+             CreateLinePlot(pred_sums_melt_10_H, sum_len = 60,2) + ylim(0,500000) + labs(subtitle = "Wave H"),
+             ncol = 1)
+
+grid.arrange(CreateLinePlot(pred_sums_melt_10_G_nfl, sum_len = 60,2) + ylim(0,500000) + labs(subtitle = "Wave G"),
+             CreateLinePlot(pred_sums_melt_10_H_nfl, sum_len = 60,2) + ylim(0,500000) + labs(subtitle = "Wave H"),
+             ncol = 1)
+
+# ggsave("Pred Plot.png")
+```
+
+
+```{r, fig.height=6, fig.width=10}
+
+####
+##Normal vs Cleaned
+act_lux_sum_10_H_clean <- CreateSummary(10,T,T,wave = "H")
+act_lux_sum_10_H <- CreateSummary(10, wave = "H")
+
+
+act_lux_sum_10_G_clean <- CreateSummary(10,T,T,wave = "G")
+act_lux_sum_10_G <- CreateSummary(10, wave = "G")
+
+grid.arrange(CreateLinePlot(act_lux_sum_10_G,10,1) + ylim(0,20) + ggtitle("Standard Wave G"),
+             CreateLinePlot(act_lux_sum_10_G_clean,10,1) + ylim(0,20) + ggtitle("Removed flags and nonwear/uknown prediction wave G"))
+
+grid.arrange(CreateLinePlot(act_lux_sum_10_H,10,1) + ylim(0,15) + ggtitle("Standard Wave H"),
+             CreateLinePlot(act_lux_sum_10_H_clean,10,1) + ylim(0,15) + ggtitle("Removed flags and nonwear/uknown prediction wave H"))
+
+
+#######
+#Should remove first/last days 
+
+act_lux_sum_10_H_clean <- CreateSummary(10,T,T,wave = "H",exclude_firstlast = 1)
+act_lux_sum_10_H <- CreateSummary(10, wave = "H",exclude_firstlast = 1)
+
+
+act_lux_sum_10_G_clean <- CreateSummary(10,T,T,wave = "G",exclude_firstlast = 1)
+act_lux_sum_10_G <- CreateSummary(10, wave = "G",exclude_firstlast = 1)
+
+grid.arrange(CreateLinePlot(act_lux_sum_10_G,10,1)  + ggtitle("Standard No first/last Wave G"),
+             CreateLinePlot(act_lux_sum_10_G_clean,10,1) + ggtitle("Removed flags and nonwear/uknown prediction No first/last Wave G"))
+
+grid.arrange(CreateLinePlot(act_lux_sum_10_H,10,1)  + ggtitle("Standard No first/last Wave H"),
+             CreateLinePlot(act_lux_sum_10_H_clean,10,1) + ggtitle("Removed flags and nonwear/uknown prediction No first/last Wave H"))
+
+######
+#Only first last days
+# 
+# act_lux_sum_10_H_clean <- CreateSummary(10,T,T,wave = "H",exclude_firstlast = 2)
+# act_lux_sum_10_H <- CreateSummary(10, wave = "H",exclude_firstlast = 2)
+# 
+# 
+# act_lux_sum_10_G_clean <- CreateSummary(10,T,T,wave = "G",exclude_firstlast = 2)
+# act_lux_sum_10_G <- CreateSummary(10, wave = "G",exclude_firstlast = 2)
+# 
+# grid.arrange(CreateLinePlot(act_lux_sum_10_G,10,1)  + ggtitle("Standard only first/last"),
+#              CreateLinePlot(act_lux_sum_10_G_clean,10,1) + ggtitle("Removed flags and nonwear/uknown prediction only first/last"))
+# 
+# grid.arrange(CreateLinePlot(act_lux_sum_10_H,10,1)  + ggtitle("Standard only first/last"),
+#              CreateLinePlot(act_lux_sum_10_H_clean,10,1) + ggtitle("Removed flags and nonwear/uknown prediction only first/last"))
+```
+
+```{r, fig.height=6, fig.width=10}
+ValByDay <- function(multi_day_act,day_of_week = F){
+  day_df <- data.frame(matrix(ncol = 2, nrow = 0))
+  
+  if (day_of_week){
+    title_type <- "Week"
+    for (i in 1:7){
+      day_act <- multi_day_act %>% filter(PAXDAYWM == i)
+      day_act <- day_act[,4:1443]
+      day_med <- apply(day_act,1,mean,na.rm = T)
+      working_day_df <- data.frame(med = day_med,
+                                   i = rep(i,length(day_med)))
+      day_df <- rbind(day_df,working_day_df)
+    }
+  } else {
+    title_type <- "Study"
+    for (i in 1:9){
+      day_act <- multi_day_act %>% filter(PAXDAYM == i)
+      day_act <- day_act[,4:1443]
+      day_med <- apply(day_act,1,mean,na.rm = T)
+      working_day_df <- data.frame(med = day_med,
+                                   i = rep(i,length(day_med)))
+      day_df <- rbind(day_df,working_day_df)
+    }
+  }
+    
+  
+  colnames(day_df) <- c("Val", "DayOf")
+  day_df$DayOf <- as.factor(day_df$DayOf)
+    
+  p <- ggplot(day_df, aes(x = DayOf, y = Val)) + 
+    geom_boxplot() + 
+    ggtitle(paste("Daily Median PAM Measure by Day of",title_type)) + 
+    ylab("Daily Median Val")
+  
+  return(p)
+}
+  
+grid.arrange(ValByDay(acth_long_G,day_of_week = F) + labs(subtitle = "Activity Wave G") + ylim(0,65),
+             ValByDay(acth_long_H,day_of_week = F) + labs(subtitle = "Activity Wave H") + ylim(0,65),
+             ncol = 2)
+
+
+grid.arrange(ValByDay(lux_long_G,day_of_week = F) + labs(subtitle = "Light Wave G") + ylim(0,350),
+             ValByDay(lux_long_H,day_of_week = F) + labs(subtitle = "Light Wave H") + ylim(0,350),
+             ncol = 2)
+
+
+grid.arrange(ValByDay(acth_long_G,day_of_week = T) + labs(subtitle = "Activity Wave G") + ylim(0,65),
+             ValByDay(acth_long_H,day_of_week = T) + labs(subtitle = "Activity Wave H") + ylim(0,65),
+             ncol = 2)
+
+grid.arrange(ValByDay(lux_long_G,day_of_week = T) + labs(subtitle = "Light Wave G") + ylim(0,350),
+             ValByDay(lux_long_H,day_of_week = T) + labs(subtitle = "Light Wave H") + ylim(0,350),
+             ncol = 2)
+
+
+```
+
+```{r}
+
+RegressionSanityCheck <- function(act_or_lux, wave){
+  if (wave == "G"){
+    flag_long <- flag_long_G
+    nonwear_long <- nonwear_long_G
+  }
+  
+  if (wave == "H"){
+    flag_long <- flag_long_H
+    nonwear_long <- nonwear_long_H
+  }
+  
+  acth_clean <- act_or_lux[,4:1443] * nonwear_long[,4:1443] * flag_long[,4:1443]
+  acth_sum <- apply(acth_clean,1,CreateSummaryHelper, 60)
+  
+  rownames(acth_sum) <- c(1:24)
+  acth_melted <- melt(acth_sum)
+  colnames(acth_melted) <- c("Hour","Person","Value")
+  acth_melted$Hour <- relevel(as.factor(acth_melted$Hour),ref = 8)
+  return(lm(Value ~ Hour, data = acth_melted))
+}
+
+acth_G_lm <- RegressionSanityCheck(acth_long_G,"G")
+lux_G_lm <- RegressionSanityCheck(lux_long_G,"G")
+
+acth_H_lm <- RegressionSanityCheck(acth_long_H,"H")
+lux_H_lm <- RegressionSanityCheck(lux_long_H,"H")
+
+### Sets values from 7-8 am as reference level
+
+
+Reg2Bar <- function(model){
+  coefs <- summary(model)$coefficients[,1]
+  coefs <- c(coefs[2:8],0,coefs[9:24])
+  coefs <- as.data.frame(coefs)
+  rownames(coefs)[8] <- "Hour8"
+  coefs$Hour <- c(1:24)
+  p <- ggplot(data = coefs, aes(x = Hour, y = coefs)) + 
+    geom_bar(stat = "identity")
+  return(p)
+}
+
+grid.arrange(Reg2Bar(acth_G_lm) + ggtitle("Regression Coefficients for Activity vs Hour Wave G"),Reg2Bar(acth_H_lm) + ggtitle("Regression Coefficients for Activity vs Hour Wave H"))
+
+
+
+grid.arrange(Reg2Bar(lux_G_lm) + ggtitle("Regression Coefficients for Light vs Hour Wave G"),Reg2Bar(lux_H_lm) + ggtitle("Regression Coefficients for Light vs Hour Wave H"))
+
+  
+
+```
+
+
+```{r}
+
+data_frame <- act_lux_sum_10_G
+sum_len <- 10
+title_to_use <- "Median Activity (MIMS) by Minute"
+
+
+ggplot(data_frame %>% filter(Type == "Activity"), aes(x = Time, y = Total)) + 
+    geom_line() +
+    scale_x_datetime(breaks = breaks_width("4 hour"),date_labels = "%H:%M") +
+    ggtitle(paste(title_to_use)) + 
+  xlab("Time") + 
+  ylab("Activity (MIMS)") + 
+  theme_bw()
+
+ggsave(filename = "MedActivity.jpg",height = 2, width = 5)
+
+
+```

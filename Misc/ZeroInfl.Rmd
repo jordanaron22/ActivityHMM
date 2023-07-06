@@ -1,0 +1,138 @@
+---
+title: "ZeroInfl"
+output: pdf_document
+date: "2023-05-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+load("Data/PAXPREDMH_long.rda")
+pred_long_H <- long_data
+load("Data/PAXMTSMH_long.rda")
+acth_long_H <- long_data
+load("Data/PAXLXMMH_long.rda")
+lux_long_H <- long_data
+acth_long_H[acth_long_H == -.01] <- NA
+
+
+
+pred_long_H[,4:1443] <- (pred_long_H[,4:1443] !=3)
+pred_long_H[is.na(pred_long_H)] <- F
+
+acth_long_H[pred_long_H == F] <- NA
+lux_long_H[pred_long_H == F] <- NA
+
+acth_long_H <- acth_long_H[,4:1443]
+lux_long_H <- lux_long_H[,4:1443]
+
+acth_long_H[acth_long_H > quantile(acth_long_H, probs = .9999,na.rm = T)] <- NA
+
+```
+
+```{r}
+load("WaveHdata.rda")
+
+act <- t(wave_data[[1]])[2:865,]
+light <- t(wave_data[[2]])[2:865,]
+covar_mat <- as.matrix(wave_data[[3]])
+
+sum(act == 0, na.rm = T)
+sum(light == 0, na.rm = T)
+sum(act == 0 & light == 0, na.rm = T)
+sum(!is.na(act) | !is.na(light))
+```
+# Zero Inflated Issue
+
+Just to recap, the setting is a bivariate (activity and light) HMM with two states, sleep and wake. We use a Normal distribution for the emission distribution for both activity and light and both sleep and wake with different parameters for each (for a total of 4 mean and 4 SEs). We also allow for covariates in the activity but I dont think thats necesarry for this problem.
+
+After downsampling from every minute to the median of every 15 minutes, out of 60 million (7702 people with 864 possible observations) non-missing data points
+  for activity 20.7 million are zero
+  for light 39 million are zero
+  there are also 20 million data points where both are 0
+  
+This means that 96% of the time that activity is 0, light is also 0. However when light is zero, activity may be non zero. Below is a histogram of activity, when light is 0
+
+```{r}
+hist(act[light == 0])
+```
+
+When running our HMM on the NHANES data it had an issue dealing with the amount of zeros in the observed light (and I suspect also for the activity data). The Light sleep emission distribution mean and SE would both shrink to 0, capturing the point mass at 0 and the light wake emission distribution would capture everything else leading to overdispersion. Although there wasn't an obvious issue with the activity emission distributions I suspect a similar albiet less extreme issue is happening.
+
+I suspect this is partly due to the idle sleep mode for activity and a light detection limit issue. I'll send over the exact text for how the idle sleep mode works at the very bottom of this doc. In non idle mode the watch tracks movement at 80hz or 80 times per second. I think it just calculated the difference between the points 80 times a second, sums that up and thats the non idle activity per second. In idle mode the watch measures at 1hz or 1 time a second. So it calculates the difference between where the watch was 1 second ago and where it is now. If it measures a movement of greater than 40 mg it goes back to wake mode. I think that for large portions of the night people aren't moving and thus a 0 is recorded over and over again for the activity. However I don't think this explains the huge difference between the amount of 0s for light and activity as only activity effects sleep mode.
+
+I think we're also dealing with a detection limit for light. Heres a histogram for the raw data 
+
+```{r}
+hist(lux_long_H[lux_long_H < 2])
+```
+
+The minimum non-zero value is 0.28. For raw activity data a similar histogram looks like 
+
+```{r}
+hist(acth_long_H[acth_long_H < 2])
+```
+The minimum non-zero value for activity is 0.006. I have not been able to find any documentation on the light detection limit in the watch manual. 
+
+Another possible problem is non-wear. Here is a very rough plot showing the total number of zeros for each time period for activity and light respectively across the study period. One day roughly corresponds to 100 time units on the X axis
+
+```{r}
+plot(rowSums(act == 0, na.rm = T), xlab = c("Time"),ylab = c("Total Number of 0s recordered for Activity"), type = "l")
+plot(rowSums(light == 0, na.rm = T), xlab = c("Time"),ylab = c("Total Number of 0s recordered for Light"), type = "l")
+```
+
+Disregarding the very beginning and end, peaks occur at night (midnight is at 96,192,288,...) when people are most likely sleeping but we still see a good chunk of zeros recorded for both activity and light during the rest of the day. However I don't think its possible for non wear to lead to more 0s for light than activity.
+
+Mark and I talked a little about possible solutions for this. One thing that came up was a spike/slab model. How I am thinking about it, is that for the sleep state we first have a Bernoulli distribution. On a failure the emission is a 0, on a success it comes from a normal distribution. Its somewhat like a mover-stayer model but instead of individuals being stayers each particular data point has the probability of being a stayer. Ive started coding some of this up but don't want to get too far without additional insight incase we decide to go on a different path.
+
+
+Additionally I looked at whether a normal distribution makes sense for our data.  For the plots below I used the down sampled data, where we take the median value over 15 minute periods:
+
+### Idle mode text
+
+These variables encoded the total number of the 80 Hz acceleration measurements included in the minute/hour/day summary record that were logged while the device was in idle sleep mode (ISM). The count includes all data, regardless whether it was flagged as "invalid" during quality control review. While taking measurements, the devices had their ISM on as a battery saving feature that was a default setting of the device firmware when NHANES data collection commenced. The device enters a sleep or low power state after experiencing 10 seconds of inactivity (fluctuation on the accelerometer < +/- 40 mg). After entering this low power state, the device checks once every second to determine if the unit has moved. While in sleep mode, the last measured accelerometer value is written into memory at the device's preset sample rate. Since the device is set to measure at 80 Hz, it will store the last known accelerometer reading 80 times every second. The device will then wake up and check for movement. If no movement (<+/- 40 mg) was detected, this pattern would continue. Otherwise, the unit would exit sleep mode and continue measuring in normal fashion. At very low levels of movement, this will impact the output of the device, including the output of MIMS-units. When ISM is triggered, very small amounts of movement are not measured; such small amounts of movement are useful to distinguish sleep and non-wear. This feature impacts the algorithm design and findings on sleep/wear/non-wear classification.
+
+
+# Does a Normal Dist fit 
+
+# Acitivity Data
+
+# Distribution of Activity Data
+```{r}
+hist(act)
+```
+
+# Distribution of Activity Data Excluding 0s
+```{r}
+hist(act[act != 0])
+```
+
+# Distribution of Log Activity Data
+```{r}
+hist(log(act + .001))
+```
+# Number of Zeros By Time
+
+
+
+# Light data
+
+# Distribution of Light Data
+```{r}
+hist(light)
+```
+# Non zero light data
+```{r}
+hist(light[light != 0])
+```
+
+Distribution of Log Light Data
+```{r}
+hist(log(light+.001))
+```
+My overall sense is that we should take a log of the data but I'm not as familiar with the drawbacks to that so I wanted to discuss it. 
+
+

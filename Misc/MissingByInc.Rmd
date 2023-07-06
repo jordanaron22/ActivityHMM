@@ -1,0 +1,163 @@
+---
+title: "MissingByIncome"
+output: html_document
+date: "2023-06-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(foreign)
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+library(scales)
+library(lubridate)
+library(reshape2)
+require(gridExtra)
+library(stringr)
+
+wave <- "H"
+
+if (wave == "H"){
+  total_num <- c(1730,960,3674,2267,1074,470)
+  
+  load("Data/PAXMTSMH_long.rda")
+  acth_long_H <- long_data
+  
+  load("Data/PAXLXMMH_long.rda")
+  lux_long_H <- long_data
+  
+  load("Data/PAXQFMH_long.rda")
+  flag_long_H <- long_data
+  
+  load("Data/PAXPREDMH_long.rda")
+  pred_long_H <- long_data
+  
+  demo <- read.xport("Raw Data/DEMO_H.XPT")
+  
+  
+}
+
+if (wave == "G"){
+  total_num <- c(1355,1076,2973,2683,1282,387)
+  
+  load("Data/PAXMTSMG_long.rda")
+  acth_long_H <- long_data
+    
+  
+  load("Data/PAXLXMMG_long.rda")
+  lux_long_H <- long_data
+    
+  
+  load("Data/PAXQFMG_long.rda")
+  flag_long_H <- long_data
+  
+  load("Data/PAXPREDMG_long.rda")
+  pred_long_H <- long_data
+  
+  demo <- read.xport("Raw Data/DEMO_G.XPT")
+}
+
+
+acth_long_H[acth_long_H == -.01] <- NA
+flag_long_H[,4:1443][flag_long_H[,4:1443] > 0 ] <- NA
+acth_long_H[,4:1443] <- acth_long_H[,4:1443] + flag_long_H[,4:1443]
+  
+
+
+# load("Data/sleepmode_long.rda")
+# sleepmode_long <- as.data.frame(sleepmode_long)
+
+  
+
+
+```
+
+```{r}
+MatchSEQN <- function(ind_seqn, add_data,var_col_ind,seqn_freq,seqn_list){
+  add_data_ind <- match(ind_seqn, add_data[,1])
+  repitions <- seqn_freq[match(ind_seqn, rownames(seqn_freq))]
+  return(rep(add_data[add_data_ind,var_col_ind],repitions))
+}
+  
+
+AddVariable <- function(var_name,add_data, seqn_freq,seqn_list){
+  var_col_ind <- which(colnames(add_data) == var_name)
+  return(unlist(lapply(seqn_list, MatchSEQN, add_data,var_col_ind,seqn_freq,seqn_list)))
+}
+ 
+seqn_freq <- table(acth_long_H$SEQN)
+seqn_list <- unique(acth_long_H$SEQN)
+
+
+covariate_df <- data.frame(race = AddVariable("INDFMPIR" ,demo, seqn_freq, seqn_list))
+covariate_df$race <- floor(covariate_df$race)
+
+
+acth_long_H <- acth_long_H %>% mutate(race = covariate_df$race, .before = 4)
+lux_long_H <- lux_long_H %>% mutate(race = covariate_df$race, .before = 4)
+pred_long_H <- pred_long_H %>% mutate(race = covariate_df$race, .before = 4)
+
+```
+
+```{r}
+race_seqn <- unique(cbind(pred_long_H$SEQN,pred_long_H$race))
+
+
+race_num <- table(race_seqn[,2])
+total_num <- table(floor(demo$INDFMPIR))
+
+race_num.df <- data.frame(race = rep(c(c(0:5)),2),
+                             participants = c(total_num,race_num),
+           datatype = rep(c("Total","Actiwatch"),each = 6))
+
+ggplot(race_num.df,aes(x= as.factor(race), y = participants, fill = datatype))+
+  geom_bar(stat="identity", position=position_dodge()) + 
+  scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 10)) + 
+  ylab("Number of Participants") + 
+  xlab("Ratio of family income to poverty") + 
+  ggtitle("Number of Participants by Ratio of family income to poverty") + 
+  labs(fill = "Data Type") + 
+  ylim(0,4000)
+
+```
+
+
+```{r}
+
+#percent of each race that we have actiwatch data for
+race_watch <- table(race_seqn[,2]) / total_num
+
+ggplot(data.frame(race_watch),aes(seq_along(race_watch),race_watch))+
+  geom_bar(stat="identity") + 
+  scale_x_discrete(name ="Ratio of family income to poverty", 
+                    limits=str_wrap(c(0:5),width = 15)) + 
+  ylab("Percent") + 
+  ggtitle("Percent of Participants with Actiwatch Data by Ratio of family income to poverty") + 
+  ylim(0,1)
+```
+
+```{r}
+NonWearRace <- function(race_ind){
+  working_race <- pred_long_H %>% filter(race == race_ind)
+  working_race <- working_race[,5:1444]
+  denom <- sum(!is.na(working_race))
+  num <- sum(working_race == 3, na.rm = T)
+  return(num/denom)
+}
+
+race_inds <- c(0:5)
+
+race_nonwear <- unlist(lapply(race_inds,NonWearRace))
+
+ggplot(data.frame(race_nonwear),aes(seq_along(race_nonwear),race_nonwear))+
+  geom_bar(stat="identity") + 
+  scale_x_discrete(name ="Ratio of family income to poverty", 
+                    limits=str_wrap(c(0:5),width = 15)) + 
+  ylab("Percent") + 
+  ggtitle("Actiwatch Non-Wear by Ratio of family income to poverty") + 
+  ylim(0,.25)
+```

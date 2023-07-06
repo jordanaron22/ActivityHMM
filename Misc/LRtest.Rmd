@@ -1,0 +1,67 @@
+---
+title: "RegressionTest"
+output: html_document
+date: "2023-04-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(nlme)
+library(emmeans)
+
+n <- 10000
+inter <- rnorm(n,20,sqrt(100)) 
+cv1 <- rnorm(n,3,sqrt(50))
+cv2 <- rnorm(n,-3,0)
+# 
+cv1_ind <- rbinom(n,1,1/2)
+cv2_ind <- rbinom(n,1,1/2)
+
+y <- inter + cv1*cv1_ind + cv2*cv2_ind
+
+df <- data.frame(y = y,
+                 cv1 = cv1_ind,
+                 cv2 = cv2_ind)
+df_inter <- df
+df_inter[,1] <- 1
+df_inter <- as.matrix(df_inter)
+
+model <- gls(y ~ cv1+cv2, data = df,
+             weights = varIdent(form = ~1|cv1))
+
+summary(model)
+
+anova(mod,model)
+
+sqrt(sum(model$residuals^2) / length(model$residuals))
+
+sqrt(240.891 / sum(cv1_ind == 1))
+
+
+coef_ind <- 1
+xxinv <-solve(t(df_inter) %*% df_inter)
+summary(model)$coefficient[coef_ind,2]^2 /xxinv[coef_ind,coef_ind]
+  
+
+
+```
+
+
+```{r}
+
+x <- c(rnorm(500,10,1),rnorm(500,10,5),rnorm(500,20,1))
+df <- data.frame(val = x,
+                 type = rep(c(1,2,3),each = 500))
+
+X <- rep(1,1500)
+Y <- df$val
+V <- diag(rep(c(1,25,1),each = 500))
+V2 <- diag(rep(c(1,1,0),each = 500))
+W <- solve(V%*%V2)
+
+
+solve(t(X) %*% W %*% X) %*% t(X) %*% W %*% Y
+```
