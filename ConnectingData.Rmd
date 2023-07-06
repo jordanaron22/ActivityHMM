@@ -1,0 +1,166 @@
+---
+title: "ConnectingData"
+output: html_document
+date: "2023-01-19"
+---
+
+```{r}
+library(foreign)
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+library(scales)
+library(lubridate)
+library(reshape2)
+require(gridExtra)
+
+load("Data/PAXPREDMH_long.rda")
+pred_long_H <- long_data
+
+
+# load("Data/sleepmode_long.rda")
+# sleepmode_long <- as.data.frame(sleepmode_long)
+
+# load("Data/PAXMTSMG_long.rda")
+# acth_long_G <- long_data
+load("Data/PAXMTSMH_long.rda")
+acth_long_H <- long_data
+
+# load("Data/PAXLXMMG_long.rda")
+# lux_long_G <- long_data
+load("Data/PAXLXMMH_long.rda")
+lux_long_H <- long_data
+
+# load("Data/PAXQFMG_long.rda")
+# flag_long_G <- long_data
+load("Data/PAXQFMH_long.rda")
+flag_long_H <- long_data
+
+# apply(long_data,2,as.numeric)
+
+#Set -.01 values to NA
+# acth_long_G[acth_long_G == -.01] <- NA
+acth_long_H[acth_long_H == -.01] <- NA
+ 
+
+#FIlter out flags
+
+# flag_long_G[,4:1443][flag_long_G[,4:1443] > 0 ] <- NA
+# acth_long_G[,4:1443] <- acth_long_G[,4:1443] + flag_long_G[,4:1443]
+
+flag_long_H[,4:1443][flag_long_H[,4:1443] > 0 ] <- NA
+acth_long_H[,4:1443] <- acth_long_H[,4:1443] + flag_long_H[,4:1443]
+
+# NOT USING THIS
+# Probably dont want to incorporate any of this prediction alg in our pred alg
+# #Filter our predicted non wear
+# #Removes 12091619 obs roughly 14% 
+# nonwear_long <- pred_long
+# nonwear_long[,3:1442] <- (pred_long[,3:1442] !=3 & pred_long[,3:1442] !=4)
+# nonwear_long[,3:1442] <- (pred_long[,3:1442] !=3)
+# nonwear_long[nonwear_long==F] <- NA
+
+pred_long_H[,4:1443] <- (pred_long_H[,4:1443] !=3)
+pred_long_H[is.na(pred_long_H)] <- F
+
+acth_long_H[pred_long_H == F] <- NA
+lux_long_H[pred_long_H == F] <- NA
+
+#Trims top .0001%
+acth_long_H[,4:1443][acth_long_H[,4:1443] > quantile(acth_long_H[,4:1443], probs = .9999,na.rm = T)] <- NA
+#Doesnt actually remove any lux values
+#Max value of 2500, approx 300k times
+lux_long_H[,4:1443][lux_long_H[,4:1443] > quantile(lux_long_H[,4:1443], probs = .9999,na.rm = T)] <- NA
+```
+
+```{r}
+MatchSEQN <- function(ind_seqn, add_data,var_col_ind,seqn_freq,seqn_list){
+  add_data_ind <- match(ind_seqn, add_data[,1])
+  repitions <- seqn_freq[match(ind_seqn, rownames(seqn_freq))]
+  return(rep(add_data[add_data_ind,var_col_ind],repitions))
+}
+  
+
+AddVariable <- function(var_name,add_data, seqn_freq,seqn_list){
+  var_col_ind <- which(colnames(add_data) == var_name)
+  return(unlist(lapply(seqn_list, MatchSEQN, add_data,var_col_ind,seqn_freq,seqn_list)))
+}
+ 
+# covariate_df <- data.frame(age = AddVariable("RIDAGEYR" ,demo, seqn_freq, seqn_list),
+#                            gender = AddVariable("RIAGENDR" ,demo, seqn_freq, seqn_list),
+#                            race = AddVariable("RIDRETH3" ,demo, seqn_freq, seqn_list),
+#                            ed1 = AddVariable("DMDEDUC3" ,demo, seqn_freq, seqn_list),
+#                            ed2 = AddVariable("DMDEDUC2" ,demo, seqn_freq, seqn_list),
+#                            income = AddVariable("INDHHIN2" ,demo, seqn_freq, seqn_list),
+#                            houseFS = AddVariable("FSDHH" ,food_sec, seqn_freq, seqn_list),
+#                            insurance = AddVariable("HIQ011" ,health_insurance, seqn_freq, seqn_list))
+
+seqn_freq <- table(acth_long_H$SEQN)
+seqn_list <- unique(acth_long_H$SEQN)
+demo <- read.xport("Raw Data/DEMO_H.XPT")
+health_insurance <- read.xport("Raw Data/HIQ_H.XPT")
+food_sec <- read.xport("Raw Data/FSQ_H.XPT")
+
+
+########
+#Weights for examination (so PAM)
+#To include weights for wave G and H just divide all weights by 2
+# demo$WTMEC2YR 
+
+covariate_df <- data.frame(gender = AddVariable("RIAGENDR" ,demo, seqn_freq, seqn_list),
+                           houseFS = AddVariable("FSDHH" ,food_sec, seqn_freq, seqn_list),
+                           race = AddVariable("RIDRETH3" ,demo, seqn_freq, seqn_list),
+                           sweights = AddVariable("WTMEC2YR" ,demo, seqn_freq, seqn_list))
+
+covariate_df <- covariate_df %>% mutate(houseFS = replace(houseFS, houseFS > 1, 2) - 1)
+covariate_df <- covariate_df %>% mutate(gender = gender - 1)
+covariate_df <- covariate_df %>% add_column(intercept = 1, .before = "gender")
+
+covariate_H <- covariate_df
+
+complete_inds_H <- complete.cases(covariate_H)
+
+
+id_info <- acth_long_H[complete_inds_H,][,1:3]
+acth_long_H <- acth_long_H[complete_inds_H,][,4:1443]
+lux_long_H <- lux_long_H[complete_inds_H,][,4:1443]
+covariate_H <- covariate_H[complete_inds_H,]
+
+
+DownsampleInd <- function(long_data_ind, minutes = 15){
+  down_samp_ind_mat <- matrix(as.numeric(long_data_ind), ncol = minutes, byrow = T)
+  #MEAN HERE NOT MEDIAN
+  return(apply(down_samp_ind_mat,1,mean, na.rm = T))
+}
+
+DownsampleConcatTranspose <- function(data_long,id_info){
+  
+  acth_down_H <- apply(data_long,1,DownsampleInd)
+  acth_down_full_H <- cbind(id_info,t(acth_down_H))
+  
+  acth_down_full_H <- acth_down_full_H %>% pivot_wider(id_cols = SEQN,names_from = PAXDAYM,
+                         values_from = colnames(acth_down_full_H)[4:99],
+                         names_glue = "{PAXDAYM}_{.value}",
+                         names_vary = "slowest")
+  
+  return(acth_down_full_H)
+}
+
+  
+acth_down_H <- DownsampleConcatTranspose(acth_long_H,id_info)
+lux_down_H <- DownsampleConcatTranspose(lux_long_H,id_info)
+
+covariate_H <- apply(covariate_H,2,as.numeric) 
+covariate_H <- cbind(covariate_H,id_info)
+covariate_H <- covariate_H %>% filter(PAXDAYM == 1)
+id_info_H <- covariate_H[4:6]
+covariate_H <- covariate_H[,1:3]
+
+wave_data <- list(acth_down_H,lux_down_H,covariate_H,id_info_H)
+
+save(wave_data,file = "WaveHdata.rda")
+
+##Input this into AHMM
+#Right now, single person is spread across multiple rows
+#PRobably want to convert each person to only 1 row
+```
