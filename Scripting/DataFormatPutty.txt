@@ -1,0 +1,1 @@
+sbatch --export=varNameWave='PAXLXMM G' DataFormatScript.sh
