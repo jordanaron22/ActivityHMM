@@ -9,7 +9,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-setwd("RoutputsTCovar/")
+setwd("Routputs")
 file_list <- list.files()
 
 init_true_array <- matrix(0,2,length(file_list))
@@ -183,6 +183,8 @@ grid.arrange(AnalyzeResids(cor_true_array,cor_est_array,1,title = "Wake Correlat
              AnalyzeResids(cor_true_array,cor_est_array,2,title = "Sleep Correlation"),
              nrow = 1)
 
-AnalyzeResids(binom_true_array,binom_est_array,2,title = "Wake Correlation")
+grid.arrange(AnalyzeResids(binom_true_array,binom_est_array,1,title = "Act LoD"),
+             AnalyzeResids(binom_true_array,binom_est_array,2,title = "Light LoD"),
+             nrow = 1)
 
 ```

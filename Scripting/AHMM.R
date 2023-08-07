@@ -1,18 +1,18 @@
-#STILL NEED TO CHANGE IN CLASS FUNCT
 use_bivar <- T
 use_covar <- T
 
 large_sim <- T
 set_seed <- T
 
-real_data <- F
+real_data <- T
+epsilon <- .00001
 
 
 #### Functions ####
 SimulateHMM <- function(day_length,num_ind,covar_num,init,params_tran,emit_act,emit_light, wake_sleep_corr, act_light_binom,use_covar){
   
   if (use_covar == F){
-    wake_sleep_corr <- c(0,0)
+    # wake_sleep_corr <- c(0,0)
   }
   
   covar_mat_emis <- matrix(rbinom(num_ind*covar_num,1,0.5),num_ind,covar_num)
@@ -56,13 +56,14 @@ SimulateHMM <- function(day_length,num_ind,covar_num,init,params_tran,emit_act,e
       light[i] <- act_light[2]
       
       if (hidden_states[i] == 1){
-        # if (rbinom(1,1,act_light_binom[1]) == 1){
-        #   activity_mat_ind[i,] <- 0
-        #   act_lod_vec[i] <- 1
-        # }
+        if (rbinom(1,1,act_light_binom[1]) == 1){
+          activity_mat_ind[i,1] <- log(epsilon)
+          activity_mat_ind[i,2:3] <- 0
+          act_lod_vec[i] <- 1
+        }
         
         if (rbinom(1,1,act_light_binom[2]) == 1){
-          light[i] <- 0
+          light[i] <- log(epsilon)
           light_lod_vec[i] <- 1
         } 
       }
@@ -108,8 +109,16 @@ logClassification <- function(time,current_state,act,light,emit_act,emit_light,c
         lognorm_dens <- log(mvtnorm::dmvnorm(x = c(act[time],light[time]), mean = c(mu_act,mu_light), sigma = sigma_mat, checkSymmetry = F))
       } else {
         lognorm_dens <- log(
-          ((1-act_light_binom[2]) * (light[time]!=0) * mvtnorm::dmvnorm(x = c(act[time],light[time]), mean = c(mu_act,mu_light), sigma = sigma_mat, checkSymmetry = F))+
-            (act_light_binom[2] * (light[time]==0)) * dnorm(act[time],mu_act,sig_act))
+          ((1-act_light_binom[2]) * (light[time]!=log(epsilon)) * (1-act_light_binom[1]) * (act[time]!=log(epsilon)) *
+             mvtnorm::dmvnorm(x = c(act[time],light[time]), mean = c(mu_act,mu_light), sigma = sigma_mat, checkSymmetry = F)) +
+            
+            ((act_light_binom[2] * (light[time]==log(epsilon))) * (1-act_light_binom[1]) * (act[time]!=log(epsilon)) * 
+            dnorm(act[time],mu_act,sig_act)) + 
+            
+            ((1-act_light_binom[2]) * (light[time]!=log(epsilon)) * (act_light_binom[1]) * (act[time]==log(epsilon)) * 
+            dnorm(light[time],mu_light,sig_light)) +
+            
+            ((act_light_binom[2] * (light[time]==log(epsilon))) * (act_light_binom[1]) * (act[time]==log(epsilon)))) 
       }
         
     } else {
@@ -117,24 +126,31 @@ logClassification <- function(time,current_state,act,light,emit_act,emit_light,c
         lognorm_dens <- log(dnorm(act[time],mu_act,sig_act)) + log(dnorm(light[time],mu_light,sig_light))
       } else {
         lognorm_dens <- log(dnorm(act[time],mu_act,sig_act)) + 
+          #need to add binom for act here
           log(
-            ((1-act_light_binom[2]) * (light[time]!=0) * dnorm(light[time],mu_light,sig_light))+
-              (act_light_binom[2] * (light[time]==0)))
+            ((1-act_light_binom[2]) * (light[time]!=log(epsilon)) * dnorm(light[time],mu_light,sig_light))+
+              (act_light_binom[2] * (light[time]==log(epsilon))))
       }
         
     }
     
   
   } else if (!is.na(act[time]) & is.na(light[time])){
-    lognorm_dens <- log(dnorm(act[time],mu_act,sig_act))
+    if (current_state == 0){
+      lognorm_dens <- log(dnorm(act[time],mu_act,sig_act))
+    } else {
+      lognorm_dens <-log(
+        ((1-act_light_binom[1]) * (act[time]!=log(epsilon)) * dnorm(act[time],mu_act,sig_act)) +
+          (act_light_binom[1] * (act[time]==log(epsilon))))
+    }
 
   } else if (is.na(act[time]) & !is.na(light[time])){
     if (current_state == 0){
       lognorm_dens <- log(dnorm(light[time],mu_light,sig_light))
     } else {
       lognorm_dens <-log(
-        ((1-act_light_binom[2]) * (light[time]!=0) * dnorm(light[time],mu_light,sig_light)) +
-          (act_light_binom[2] * (light[time]==0)))
+        ((1-act_light_binom[2]) * (light[time]!=log(epsilon)) * dnorm(light[time],mu_light,sig_light)) +
+          (act_light_binom[2] * (light[time]==log(epsilon))))
     }
 
 
@@ -482,7 +498,7 @@ RecoverAct <- function(act,emit_act,covar_mat_emis,weights_mat){
   return(recovered_act)
 }
 
-CalcWeightCorr <- function(act,light,weights_vec,lod_light_weight = 0){
+CalcWeightCorr <- function(act,light,weights_vec,lod_light_weight,lod_act_weight){
   
   act_wake_vec <- as.vector(act)
   act_sleep_vec <- as.vector(act)
@@ -496,21 +512,20 @@ CalcWeightCorr <- function(act,light,weights_vec,lod_light_weight = 0){
   inds_to_keep <- !is.na(light_vec) & !is.na(act_wake_vec)
   weights_vec <- weights_vec[inds_to_keep]
   lod_light_weight <- lod_light_weight[inds_to_keep]
+  lod_act_weight <- lod_act_weight[inds_to_keep]
   act_wake_vec <- act_wake_vec[inds_to_keep]
   act_sleep_vec <- act_sleep_vec[inds_to_keep]
   light_vec <- light_vec[inds_to_keep]
   
 
   return(c(weightedCorr(act_wake_vec,light_vec,"Pearson",weights = (1-weights_vec)),
-           weightedCorr(act_sleep_vec,light_vec,"Pearson",weights = (weights_vec) * (1- lod_light_weight))))
+           weightedCorr(act_sleep_vec,light_vec,"Pearson",weights = ((weights_vec) * (1- lod_light_weight)* (1- lod_act_weight)))))
 }
 
 CalcTran <- function(alpha,beta,act,light,trans,emit_act,emit_light,covar_mat_emis,covar_mat_tran,wake_sleep_corr,act_light_binom, return_grad = F){
   
   len <- dim(act)[1]
 
-
-  
   gradient <- matrix(0,2,6)
   hessian <- matrix(0,12,12)
   hessian_vec <- matrix(0,2,6)
@@ -595,193 +610,6 @@ LogLike <- function(params_tran){
   return(-CalcLikelihood(alpha))
 }
 
-
-CalcGradHess <- function(params, return_grad = F){
-  # b1 <- params[1]
-  # b2 <- params[2]
-  # 
-  # first_der_1a <- -expit(b1)
-  # first_der_1b <- expit(-b1)
-  # first_der_2a <- -expit(b2)
-  # first_der_2b <- expit(-b2)
-  # 
-  # second_der_1a <- -expit(b1)*expit(-b1)
-  # second_der_1b <- -expit(b1)*expit(-b1)
-  # second_der_2a <- -expit(b2) * expit(-b2)
-  # second_der_2b <- -expit(b2) * expit(-b2)
-
-  
-  gradient <- matrix(0,2,6)
-  hessian_vec <- matrix(0,2,6)
-  hessian <- matrix(0,12,12)
-
-  #SPEED UP
-  for (ind in 1:dim(act)[2]){
-    
-    cons_rs_1a <- 0
-    cons_rs_1b <- 0
-    
-    cons_rs_2a <- 0
-    cons_rs_2b <- 0
-    
-    tran_ind <- ChooseTran(covar_mat_tran[ind,])
-    tran <- trans[[tran_ind]]
-    
-    first_der_1a <- -tran[1,2]
-    first_der_1b <- tran[1,1]
-    first_der_2a <- -tran[2,1]
-    first_der_2b <- tran[2,2]
-    
-    second_der_1 <- -tran[1,2] * tran[1,1]
-    second_der_2 <- -tran[2,2] * tran[2,1]
-
-    likelihood_ind <- logSumExp(c(alpha[[ind]][day_length,]))
-    alpha_ind <- alpha[[ind]]
-    beta_ind <- beta[[ind]]
-    for (t in 2:dim(act)[1]){
-
-      cons_rs_1a <- cons_rs_1a + exp(alpha_ind[t-1,1] +
-                                       logClassification(t,0,act[,ind],light[,ind],emit_act,emit_light,covar_mat_emis[ind,],wake_sleep_corr,act_light_binom) +
-                                       log(tran[1,1]) +
-                                       beta_ind[t,1] -
-                                       likelihood_ind)
-
-      cons_rs_1b <- cons_rs_1b + exp(alpha_ind[t-1,1] +
-                                       logClassification(t,1,act[,ind],light[,ind],emit_act,emit_light,covar_mat_emis[ind,],wake_sleep_corr,act_light_binom) +
-                                       log(tran[1,2]) +
-                                       beta_ind[t,2] -
-                                       likelihood_ind) 
-
-      cons_rs_2a <- cons_rs_2a + exp(alpha_ind[t-1,2] +
-                                       logClassification(t,1,act[,ind],light[,ind],emit_act,emit_light,covar_mat_emis[ind,],wake_sleep_corr,act_light_binom) +
-                                       log(tran[2,2]) +
-                                       beta_ind[t,2] -
-                                       likelihood_ind) 
-
-      cons_rs_2b <- cons_rs_2b + exp(alpha_ind[t-1,2] +
-                                       logClassification(t,0,act[,ind],light[,ind],emit_act,emit_light,covar_mat_emis[ind,],wake_sleep_corr,act_light_binom) +
-                                       log(tran[2,1]) +
-                                       beta_ind[t,1] -
-                                       likelihood_ind)
-
-    }
-    
-    
-    gradient[1,tran_ind] <- gradient[1,tran_ind] + (first_der_1a*cons_rs_1a + first_der_1b*cons_rs_1b) * -1
-    gradient[2,tran_ind] <- gradient[2,tran_ind] + (first_der_2a*cons_rs_2a + first_der_2b*cons_rs_2b) * -1
-    
-    hessian_vec[1,tran_ind] <- hessian_vec[1,tran_ind] + (second_der_1*cons_rs_1a + second_der_1*cons_rs_1b) * -1
-    hessian_vec[2,tran_ind] <- hessian_vec[2,tran_ind] + (second_der_2*cons_rs_2a + second_der_2*cons_rs_2b) * -1
-    
-    if (tran_ind != 1){
-      gradient[1,1] <- gradient[1,1] + (first_der_1a*cons_rs_1a + first_der_1b*cons_rs_1b) * -1
-      gradient[2,1] <- gradient[2,1] + (first_der_2a*cons_rs_2a + first_der_2b*cons_rs_2b) * -1
-      
-      hessian_vec[1,1] <- hessian_vec[1,1] + (second_der_1*cons_rs_1a + second_der_1*cons_rs_1b) * -1
-      hessian_vec[2,1] <- hessian_vec[2,1] + (second_der_2*cons_rs_2a + second_der_2*cons_rs_2b) * -1
-    }
-    
-  }
-  
-  gradient <- as.vector(t(gradient))
-
-
-  diag(hessian) <- c(hessian_vec[1,],hessian_vec[2,])
-  hessian[1,] <- c(hessian_vec[1,],rep(0,6))
-  hessian[,1] <- c(hessian_vec[1,],rep(0,6))
-  
-  hessian[7:12,7] <- c(hessian_vec[2,])
-  hessian[7,7:12] <- c(hessian_vec[2,])
-
-  if(return_grad){
-    return(gradient)
-  } else {
-    return(list(gradient,hessian))
-  }
-}
-
-CalcGradHessOLD <- function(params, return_grad = F){
-  b1 <- params[1]
-  b2 <- params[2]
-  
-  first_der_1a <- -expit(b1)
-  first_der_1b <- expit(-b1)
-  first_der_2a <- -expit(b2)
-  first_der_2b <- expit(-b2)
-  
-  second_der_1a <- -expit(b1)*expit(-b1)
-  second_der_1b <- -expit(b1)*expit(-b1)
-  second_der_2a <- -expit(b2) * expit(-b2)
-  second_der_2b <- -expit(b2) * expit(-b2)
-  
-  cons_rs_1a <- 0
-  cons_rs_1b <- 0
-  
-  cons_rs_2a <- 0
-  cons_rs_2b <- 0
-  
-  #SPEED UP
-  for (ind in 1:dim(act)[2]){
-    
-    tran_ind <- ChooseTran(covar_mat_tran[ind,])
-    tran <- trans[[tran_ind]]
-    
-    if(init_state == 1 & new_state == 1){
-      tran_1st_deriv <- -tran[1,2]
-    } else if(init_state == 1 & new_state == 2){ 
-      tran_1st_deriv <- tran[1,1]
-    } else if(init_state == 2 & new_state == 2){ 
-      tran_1st_deriv <- -tran[2,1]
-    } else if(init_state == 2 & new_state == 1){ 
-      tran_1st_deriv <- tran[2,2]
-    }
-    
-    likelihood_ind <- logSumExp(c(alpha[[ind]][day_length,]))
-    alpha_ind <- alpha[[ind]]
-    beta_ind <- beta[[ind]]
-    for (t in 2:dim(act)[1]){
-      
-      cons_rs_1a <- cons_rs_1a + exp(alpha_ind[t-1,1] +
-                                       logClassification(t,0,act[,ind],light[,ind],emit_act,emit_light,covar_mat_emis[ind,],wake_sleep_corr,act_light_binom) +
-                                       log(tran[1,1]) +
-                                       beta_ind[t,1] -
-                                       likelihood_ind)
-      
-      cons_rs_1b <- cons_rs_1b + exp(alpha_ind[t-1,1] +
-                                       logClassification(t,1,act[,ind],light[,ind],emit_act,emit_light,covar_mat_emis[ind,],wake_sleep_corr,act_light_binom) +
-                                       log(tran[1,2]) +
-                                       beta_ind[t,2] -
-                                       likelihood_ind)
-      
-      cons_rs_2a <- cons_rs_2a + exp(alpha_ind[t-1,2] +
-                                       logClassification(t,1,act[,ind],light[,ind],emit_act,emit_light,covar_mat_emis[ind,],wake_sleep_corr,act_light_binom) +
-                                       log(tran[2,2]) +
-                                       beta_ind[t,2] -
-                                       likelihood_ind)
-      
-      cons_rs_2b <- cons_rs_2b + exp(alpha_ind[t-1,2] +
-                                       logClassification(t,0,act[,ind],light[,ind],emit_act,emit_light,covar_mat_emis[ind,],wake_sleep_corr,act_light_binom) +
-                                       log(tran[2,1]) +
-                                       beta_ind[t,1] -
-                                       likelihood_ind)
-      
-    }
-  }
-  
-  
-  expectation <- cons_rs_1a * tran[1,1] + cons_rs_1b*tran[1,2] + cons_rs_2a*tran[2,2] + cons_rs_2b*tran[2,1]
-  
-  gradient <- c((first_der_1a*cons_rs_1a + first_der_1b*cons_rs_1b) * -1,(first_der_2a*cons_rs_2a + first_der_2b*cons_rs_2b) * -1)
-  
-  hessian <- matrix(c((second_der_1a*cons_rs_1a + second_der_1b*cons_rs_1b) * 1,0,0,(second_der_2a*cons_rs_2a + second_der_2b*cons_rs_2b) * 1),2,2,byrow = T)
-  
-  if(return_grad){
-    return(gradient)
-  } else {
-    return(list(gradient,hessian))
-  }
-}
-
 #### User Settings Start Here ####
 
 library(matrixStats)
@@ -794,6 +622,7 @@ library(mvtnorm)
 library(Matrix)
 library(numDeriv)
 library(tictoc)
+library(dplyr)
 # library(emdbook)
 
 
@@ -806,21 +635,21 @@ params_tran_true <- c(-3,.5,1,-1,-1,1,-2.2,.3,.6,.6,-.6,-.6)
 trans_true <- Params2Tran(params_tran_true)
 
 if (use_covar){
-  emit_act_wake_true <- matrix(c(15,4,
-                                 1,0,
-                                 -3/4,0),byrow=T,3)
+  emit_act_wake_true <- matrix(c(3,1,
+                                 1/5,0,
+                                 -1/4,0),byrow=T,3)
   
-  emit_act_sleep_true <- matrix(c(5,3,
-                                  4/5,0,
+  emit_act_sleep_true <- matrix(c(-1/3,2,
+                                  1/3,0,
                                   -1/2,0),byrow=T,3)
   
   
 } else {
-  emit_act_wake_true <- matrix(c(7,4,
+  emit_act_wake_true <- matrix(c(3,1,
                                  0,0,
                                  0,0),byrow=T,3)
   
-  emit_act_sleep_true <- matrix(c(5,3,
+  emit_act_sleep_true <- matrix(c(-1/3,2,
                                   0,0,
                                   0,0),byrow=T,3)
 }
@@ -833,23 +662,18 @@ dimnames(emit_act_true)[[2]] <- c("Mean","Std Dev")
 dimnames(emit_act_true)[[3]] <- c("Wake","Sleep")
 #
 
-# emit_light_true <- matrix(c(275,560,
-#                             3,1/2),byrow = T,ncol = 2)
 
-emit_light_true <- matrix(c(200,100,
-                            4,1/2),byrow = T,ncol = 2)
-
-emit_light_true <- matrix(c(6,1,
-                            4,1/2),byrow = T,ncol = 2)
+emit_light_true <- matrix(c(4,2,
+                            0,2),byrow = T,ncol = 2)
 
 colnames(emit_light_true) <- c("Mean","Std Dev")
 rownames(emit_light_true) <- c("Wake","Sleep")
 
 #Correlation between activity and light for sleep and wake state
-wake_sleep_corr_true <- c(.4,.2)
+wake_sleep_corr_true <- c(.4,.3)
 
 #Prob of being below detection limit
-act_light_binom_true <- c(0,.55)
+act_light_binom_true <- c(.05,.7)
 
 
 #### Simulate True Data ####
@@ -862,10 +686,10 @@ if (!real_data){
   
   if (large_sim){
     day_length <- 96 * 3
-    num_of_people <- 2000
+    num_of_people <- 3000
   } else {
-    day_length <- 96 * 1
-    num_of_people <- 300
+    day_length <- 96 * 1/2
+    num_of_people <- 500
   }
   
   
@@ -891,16 +715,19 @@ if (!real_data){
   emit_act_true_emp <- CalcEmpiricAct(mc,act_array,covar_mat_emis,act_lod)
   params_act_true_emp <- EmitAct2ParamsAct(emit_act_true_emp)
   wake_sleep_corr_true_emp <- c(cor(as.vector(light)[as.vector(mc) == 0],as.vector(act_array[,1,])[as.vector(mc) == 0]),
-                                cor(as.vector(light)[as.vector(mc) == 1 & as.vector(light_lod) == 0],as.vector(act_array[,1,])[as.vector(mc) == 1 & as.vector(light_lod) == 0]))
+                                cor(as.vector(light)[as.vector(mc) == 1 & as.vector(light_lod) == 0 & as.vector(act_lod) == 0],
+                                    as.vector(act_array[,1,])[as.vector(mc) == 1 & as.vector(light_lod) == 0 & as.vector(act_lod) == 0]))
   
   act_light_binom_true_emp <- c(sum(act_lod[mc==1]==1)/length(act_lod[mc==1]),
                                 sum(light_lod[mc==1]==1)/length(light_lod[mc==1]))
   
   
   #CHECK MISSING AND CORRELATION BEFORE SIM
-  # act <- apply(act,2,InduceMissingVec, prob = .3)
-  # light <- apply(light,2,InduceMissingVec, prob = .3)
+  act <- apply(act,2,InduceMissingVec, prob = .3)
+  light <- apply(light,2,InduceMissingVec, prob = .3)
 }
+
+
 
 #### Initialize starting parameters ####
 init  <- c(runif(1,.1,.5),0)
@@ -910,24 +737,24 @@ init[2] <- 1 - init[1]
 params_tran <- params_tran_true + runif(12,-.3,.3)
 trans <- Params2Tran(params_tran)
 
-emit_act_wake <- matrix(c(runif(1,10,20),runif(1,2,6),
-                          runif(1,0,0),runif(1,0,0),
-                          runif(1,0,0),runif(1,0,0)),byrow=T,3)
+emit_act_wake <- matrix(c(runif(1,2,4),runif(1,1/2,3/2),
+                          runif(1,.1,.3),runif(1,0,0),
+                          runif(1,-.3,-.2),runif(1,0,0)),byrow=T,3)
 
-emit_act_sleep <- matrix(c(runif(1,1,7),runif(1,1,3),
-                           runif(1,0,0),runif(1,0,0),
-                           runif(1,0,0),runif(1,0,0)),byrow=T,3)
+emit_act_sleep <- matrix(c(runif(1,-2/3,0),runif(1,1,3),
+                           runif(1,.3,.4),runif(1,0,0),
+                           runif(1,-.6,-.4),runif(1,0,0)),byrow=T,3)
 
 emit_act <- abind(emit_act_wake,emit_act_sleep,along=3)
 
-emit_light <- matrix(c(runif(1,200,350),runif(1,510,610),
-                       runif(1,1,5),runif(1,.1,1.1)), byrow = T, 2)
+emit_light <- matrix(c(runif(1,3,5),runif(1,1,3),
+                       runif(1,-1/2,1/2),runif(1,1,3)), byrow = T, 2)
 
 params_act <- EmitAct2ParamsAct(emit_act)
 params_light <- as.vector(t(emit_light))
 
 wake_sleep_corr <- c(runif(1,.3,.5),runif(1,.1,.3))
-act_light_binom <- c(0,runif(1,.4,.6))
+act_light_binom <- c(runif(1,0,.1),runif(1,.4,.6))
 #### Load in Real Data ####
 if(real_data){
   load("WaveHdata.rda")
@@ -935,12 +762,21 @@ if(real_data){
   sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
   
   id <- wave_data[[4]]
-  race_bool <- id$race == sim_num
   
+  id$race[id$race==6] <- 5
+  id$race[id$race==7] <- 6
   
-  act <- wave_data[[1]][race_bool,]
-  light <- wave_data[[2]][race_bool,]
-  covar_mat_emis <- as.matrix(wave_data[[3]])[race_bool,]
+  covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$race))
+  covar_mat_tran[,1] <- 1
+  
+  for (i in 1:length(id$race)){
+    covar_mat_tran[i,id$race[i]] <- 1
+  }
+  
+  act <- log(wave_data[[1]] + epsilon)
+  light <- log(wave_data[[2]] + epsilon)
+  
+  covar_mat_emis <- as.matrix(wave_data[[3]])
   
   
   act <- t(act)[2:865,]
@@ -955,27 +791,28 @@ if(real_data){
   
   init  <- c(1/3,2/3)
   
-  tran <- matrix(c(.9,.1,.06,.94), byrow = T, 2)
+  params_tran <- c(-3,.01,.01,.01,.01,.01,-2.2,.01,.01,.01,.01,.01)
   
-  emit_act_wake <- matrix(c(20,11.5,
+  trans <- Params2Tran(params_tran)
+  
+  emit_act_wake <- matrix(c(3,1,
                             0,0,
                             0,0),byrow=T,3)
   
-  emit_act_sleep <- matrix(c(5.5,7,
+  emit_act_sleep <- matrix(c(-1/3,2,
                              0,0,
                              0,0),byrow=T,3)
   
   emit_act <- abind(emit_act_wake,emit_act_sleep,along=3)
   
-  emit_light <- matrix(c(289,501,
-                         3,4), byrow = T, 2)
+  emit_light <- matrix(c(4,2,
+                         0,2), byrow = T, 2)
   
   params_act <- EmitAct2ParamsAct(emit_act)
   params_light <- as.vector(t(emit_light))
   
-  wake_sleep_corr <- c(.1,.1)
-  act_light_binom <- c(0,.75)
-  # break
+  wake_sleep_corr <- c(.4,.3)
+  act_light_binom <- c(.05,.75)
 }
 
 #### EM #### 
@@ -989,7 +826,7 @@ if(real_data){
 # act_light_binom <- act_light_binom_true_emp
 
 # init <- init_true
-# # tran <- tran_true
+# trans <- trans_true
 # emit_act <- emit_act_true
 # emit_light <- emit_light_true
 # wake_sleep_corr <- wake_sleep_corr_true
@@ -1001,7 +838,10 @@ covar_mat_emis_rep <- apply(covar_mat_emis,2,RepCovarInd)
 act_cv.df <- data.frame(activity = as.vector(act),
                         cv1 = covar_mat_emis_rep[,2],
                         cv2 = covar_mat_emis_rep[,3])
-likelihood_vec <- c()
+
+act_cv.df <- act_cv.df %>% 
+  mutate(cv1 = ifelse(activity == log(epsilon),0,cv1)) %>%
+  mutate(cv2 = ifelse(activity == log(epsilon),0,cv2))
 
 
 print("PRE PAR")
@@ -1020,7 +860,7 @@ registerDoParallel(cl)
 
 print("POST REG")
 
-clusterExport(cl,c('ForwardInd','BackwardInd','logClassification','logSumExp','dmvnorm','ChooseTran'))
+clusterExport(cl,c('ForwardInd','BackwardInd','logClassification','logSumExp','dmvnorm','ChooseTran', 'epsilon'))
 
 foreach::getDoParRegistered()
 foreach::getDoParWorkers()
@@ -1030,15 +870,12 @@ alpha <- Forward(act,light,init,trans,emit_act,emit_light,covar_mat_emis,covar_m
 print("POST ALPHA")
 beta <- Backward(act,light,trans,emit_act,emit_light,covar_mat_emis,covar_mat_tran,wake_sleep_corr,act_light_binom)
 
-# apply(alpha[[2]]+beta[[2]],1,logSumExp)
 
 new_likelihood <- CalcLikelihood(alpha)
 likelihood_vec <- c(new_likelihood)
 likelihood <- -Inf
 like_diff <- new_likelihood - likelihood
 
-
-# (grad <- grad(LogLike,as.vector(params_tran )))
 
 while(abs(like_diff) > .001){
   # tic()
@@ -1053,21 +890,17 @@ while(abs(like_diff) > .001){
   gradhess <- CalcTran(alpha,beta,act,light,trans,emit_act,emit_light,covar_mat_emis,covar_mat_tran,wake_sleep_corr,act_light_binom)
   grad <- gradhess[[1]]
   hess <- gradhess[[2]]
-  
+
   params_tran <- params_tran - solve(hess,grad)
   trans <- Params2Tran(params_tran)
   
   light_vec <- as.vector(light)
-  
-  # # If uncommenting this, need to remove light[time]!=0 in logclass
-  # # This version allows 0s to come from both bern and normal mixture
-  # # Below version only allows 0 from bern
-  # # lod_light_weight <- (as.numeric(light_vec==0) * act_light_binom[2])/(act_light_binom[2]+(1 - act_light_binom[2]) * dnorm(light_vec,emit_light[2,1],emit_light[2,2]))
-  # # act_light_binom[2] <- sum(lod_light_weight * weights_vec,na.rm = T)/sum(weights_vec)
-  
-  lod_light_weight <- as.numeric(light_vec==0)
-  # # #act_light_binom[2] <- sum(lod_light_weight * weights_vec,na.rm = T)/sum(weights_vec[!is.na(as.vector(light))])
+  lod_light_weight <- as.numeric(light_vec==log(epsilon))
   act_light_binom[2] <- sum(lod_light_weight,na.rm = T)/sum(weights_vec[!is.na(as.vector(light))])
+  
+  act_vec <- as.vector(act)
+  lod_act_weight <- as.numeric(act_vec==log(epsilon))
+  act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(weights_vec[!is.na(as.vector(act))])
   
   
   
@@ -1075,29 +908,20 @@ while(abs(like_diff) > .001){
   #Est normal distributions
   if (use_covar){
     wake_act_lm <- lm(activity ~cv1+cv2,data = act_cv.df, weights = (1-weights_vec))
-    sleep_act_lm <- lm(activity ~cv1+cv2,data = act_cv.df, weights = weights_vec)
+    sleep_act_lm <- lm(activity ~cv1+cv2,data = act_cv.df, weights = weights_vec * (1 - lod_act_weight))
   } else {
     wake_act_lm <- lm(activity ~1,data = act_cv.df, weights = (1-weights_vec))
-    sleep_act_lm <- lm(activity ~1,data = act_cv.df, weights = weights_vec)
+    sleep_act_lm <- lm(activity ~1,data = act_cv.df, weights = weights_vec * (1 - lod_act_weight))
   }
   wake_act_sigma <- WeightedSE(wake_act_lm,1-weights_vec[!is.na(act_cv.df$activity)])
-  sleep_act_sigma <- WeightedSE(sleep_act_lm,weights_vec[!is.na(act_cv.df$activity)])
+  sleep_act_sigma <- WeightedSE(sleep_act_lm,weights_vec[!is.na(act_cv.df$activity)] * (1- lod_act_weight[!is.na(act_cv.df$activity)]))
 
   wake_light_lm <- lm(as.vector(light) ~ 1, weights = (1-weights_vec))
   sleep_light_lm <- lm(as.vector(light) ~ 1, weights = (weights_vec) * (1- lod_light_weight))
   wake_light_sigma <- WeightedSE(wake_light_lm,1-weights_vec[!is.na(light)])
   sleep_light_sigma <- WeightedSE(sleep_light_lm,weights_vec[!is.na(light)]* (1- lod_light_weight[!is.na(light)]))
   
-
-  # Y <- as.vector(act)[!is.na(as.vector(act))]
-  # W <- diag(c(1-weights_vec))
-  # X <- as.matrix(act_cv.df)
-  # X[,1] <- 1
-  # B <- solve(t(X) %*% W %*% X) %*% t(X) %*% W %*% Y
-  # sig <- sqrt(t(Y - (X%*%B)) %*% W %*% (Y - (X%*%B)) / sum(W))
-
-
-    
+  
   params_light <- c(wake_light_lm[[1]],wake_light_sigma,sleep_light_lm[[1]],sleep_light_sigma)
   if (use_covar){
     params_act <- c(c(rbind(summary(wake_act_lm)$coefficients[,1],c(wake_act_sigma,0,0))),
@@ -1107,9 +931,6 @@ while(abs(like_diff) > .001){
                     c(rbind(c(summary(sleep_act_lm)$coefficients[,1],0,0),c(sleep_act_sigma,0,0))))
   }
  
-   
-
-
 
   emit_act <- ParamsAct2EmitAct(params_act)
   emit_light <- matrix(params_light,byrow = T,2)
@@ -1119,10 +940,9 @@ while(abs(like_diff) > .001){
 
 
   if(use_bivar){
-    wake_sleep_corr <- CalcWeightCorr(act,light,weights_vec,lod_light_weight)
+    wake_sleep_corr <- CalcWeightCorr(act,light,weights_vec,lod_light_weight,lod_act_weight)
   }
-    
-  
+
   alpha <- Forward(act,light,init,trans,emit_act,emit_light,covar_mat_emis,covar_mat_tran,wake_sleep_corr,act_light_binom)
   beta <- Backward(act,light,trans,emit_act,emit_light,covar_mat_emis,covar_mat_tran,wake_sleep_corr,act_light_binom)
   
@@ -1130,11 +950,9 @@ while(abs(like_diff) > .001){
   like_diff <- new_likelihood - likelihood
   print(like_diff)
   likelihood_vec <- c(likelihood_vec,new_likelihood)
-  # toc()
-  
-  # break
-  
 }
+
+
 if (!real_data){
   true_params <- list(init_true_emp,trans_true_emp,emit_light_true_emp,emit_act_true_emp,wake_sleep_corr_true_emp,act_light_binom_true_emp)
   est_params <- list(init,trans,emit_light,emit_act,wake_sleep_corr,act_light_binom)
@@ -1147,7 +965,7 @@ if (!real_data){
 
   
 if(large_sim){
-  save(params_to_save,file = paste0("AHMMSimRaceCovar",sim_num,".rda"))
+  save(params_to_save,file = paste0("AHMMdata",sim_num,".rda"))
 }
 parallel::stopCluster(cl)
 unregister_dopar()

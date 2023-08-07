@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=8
-#SBATCH --array=1-100
-#SBATCH --mem=20gb
-#SBATCH -t 2:00:00
+#SBATCH --array=1-400
+#SBATCH --mem=40gb
+#SBATCH -t 5:00:00
 #SBATCH --mail-type=NONE
 #SBATCH --mail-user=aron0064@umn.edu
 #SBATCH -A mfiecas
