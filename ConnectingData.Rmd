@@ -110,11 +110,16 @@ food_sec <- read.xport("Raw Data/FSQ_H.XPT")
 covariate_df <- data.frame(gender = AddVariable("RIAGENDR" ,demo, seqn_freq, seqn_list),
                            houseFS = AddVariable("FSDHH" ,food_sec, seqn_freq, seqn_list),
                            race = AddVariable("RIDRETH3" ,demo, seqn_freq, seqn_list),
+                           poverty = AddVariable("INDFMPIR" ,demo, seqn_freq, seqn_list),
                            sweights = AddVariable("WTMEC2YR" ,demo, seqn_freq, seqn_list))
 
 covariate_df <- covariate_df %>% mutate(houseFS = replace(houseFS, houseFS > 1, 2) - 1)
 covariate_df <- covariate_df %>% mutate(gender = gender - 1)
 covariate_df <- covariate_df %>% add_column(intercept = 1, .before = "gender")
+covariate_df <- covariate_df %>% mutate(poverty = floor(poverty) + 1)
+
+covariate_df$race[covariate_df$race==6] <- 5
+covariate_df$race[covariate_df$race==7] <- 6
 
 covariate_H <- covariate_df
 
@@ -150,17 +155,16 @@ DownsampleConcatTranspose <- function(data_long,id_info){
 acth_down_H <- DownsampleConcatTranspose(acth_long_H,id_info)
 lux_down_H <- DownsampleConcatTranspose(lux_long_H,id_info)
 
+break
+
 covariate_H <- apply(covariate_H,2,as.numeric) 
 covariate_H <- cbind(covariate_H,id_info)
 covariate_H <- covariate_H %>% filter(PAXDAYM == 1)
-id_info_H <- covariate_H[4:6]
+id_info_H <- covariate_H[4:7]
 covariate_H <- covariate_H[,1:3]
 
 wave_data <- list(acth_down_H,lux_down_H,covariate_H,id_info_H)
 
 save(wave_data,file = "WaveHdata.rda")
 
-##Input this into AHMM
-#Right now, single person is spread across multiple rows
-#PRobably want to convert each person to only 1 row
 ```
