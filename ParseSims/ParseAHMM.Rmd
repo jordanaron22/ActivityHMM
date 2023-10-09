@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 setwd("test5/")
 file_list <- list.files()
 
-# file_list <- file_list[-c(36 ,69 ,151 ,196 ,197 ,228, 238)]
+file_list <- file_list[-c(52)]
 
 num_re <- 3
 
@@ -22,17 +22,17 @@ init_est_array <- matrix(0,2,length(file_list))
 param_tran_true_array <- array(0,dim = c(2,8,length(file_list)))
 param_tran_est_array <- array(0,dim = c(2,8,length(file_list)))
 
-light_true_array <- array(0,dim = c(2,2,length(file_list)))
-light_est_array <- array(0,dim = c(2,2,length(file_list)))
+# light_true_array <- array(0,dim = c(2,2,length(file_list)))
+# light_est_array <- array(0,dim = c(2,2,length(file_list)))
 
 act_true_array <- array(0,dim = c(3,2,2,length(file_list)))
 act_est_array <- array(0,dim = c(3,2,2,length(file_list)))
 
-cor_true_array <- matrix(0,2,length(file_list))
-cor_est_array <- matrix(0,2,length(file_list))
+# cor_true_array <- matrix(0,2,length(file_list))
+# cor_est_array <- matrix(0,2,length(file_list))
 
-binom_true_array <- matrix(0,2,length(file_list))
-binom_est_array <- matrix(0,2,length(file_list))
+binom_true_array <- matrix(0,1,length(file_list))
+binom_est_array <- matrix(0,1,length(file_list))
 
 reset_true_array <- matrix(0,num_re,length(file_list))
 reset_est_array <- matrix(0,num_re,length(file_list))
@@ -51,24 +51,24 @@ for (file_ind in 1:length(file_list)){
   param_tran_true_array[,,file_ind] <- params_to_save[[1]][[2]][c(1,9,2,10,3,11,4,12,5,13,6,14,7,15,8,16)]
   param_tran_est_array[,,file_ind] <- params_to_save[[2]][[2]][c(1,9,2,10,3,11,4,12,5,13,6,14,7,15,8,16)]
   
-  light_true_array[,,file_ind] <- params_to_save[[1]][[3]]
-  light_est_array[,,file_ind] <- params_to_save[[2]][[3]]
+  # light_true_array[,,file_ind] <- params_to_save[[1]][[3]]
+  # light_est_array[,,file_ind] <- params_to_save[[2]][[3]]
   
-  act_true_array[,,,file_ind] <- params_to_save[[1]][[4]]
-  act_est_array[,,,file_ind] <- params_to_save[[2]][[4]]
+  act_true_array[,,,file_ind] <- params_to_save[[1]][[3]]
+  act_est_array[,,,file_ind] <- params_to_save[[2]][[3]]
   
-  cor_true_array[,file_ind] <- params_to_save[[1]][[5]]
-  cor_est_array[,file_ind] <- params_to_save[[2]][[5]]
+  # cor_true_array[,file_ind] <- params_to_save[[1]][[5]]
+  # cor_est_array[,file_ind] <- params_to_save[[2]][[5]]
   
   
-  binom_true_array[,file_ind] <- params_to_save[[1]][[6]]
-  binom_est_array[,file_ind] <- params_to_save[[2]][[6]]
+  binom_true_array[file_ind] <- params_to_save[[1]][[4]]
+  binom_est_array[file_ind] <- params_to_save[[2]][[4]]
   
-  reset_true_array[,file_ind] <- params_to_save[[1]][[7]]
-  reset_est_array[,file_ind] <- params_to_save[[2]][[7]]
+  reset_true_array[,file_ind] <- params_to_save[[1]][[5]]
+  reset_est_array[,file_ind] <- params_to_save[[2]][[5]]
   
-  pil_true_array[,file_ind] <- params_to_save[[1]][[8]]
-  pil_est_array[,file_ind] <- params_to_save[[2]][[8]]
+  pil_true_array[,file_ind] <- params_to_save[[1]][[6]]
+  pil_est_array[,file_ind] <- params_to_save[[2]][[6]]
   
   
   like_array[,file_ind] <- params_to_save[[3]][length(params_to_save[[3]])]
@@ -151,29 +151,31 @@ grid.arrange(AnalyzeResids(param_tran_true_array,param_tran_est_array,1,8,"Wake 
              nrow = 1)
 
 
-grid.arrange(AnalyzeResids(light_true_array,light_est_array,1,1,"Wake Light Mean"),
-             AnalyzeResids(light_true_array,light_est_array,1,2,"Wake Light SE"),
-             nrow = 1)
-
-grid.arrange(AnalyzeResids(light_true_array,light_est_array,2,1,"Sleep Light Mean"),
-             AnalyzeResids(light_true_array,light_est_array,2,2,"Sleep Light SE"),
-             nrow = 1)
+# grid.arrange(AnalyzeResids(light_true_array,light_est_array,1,1,"Wake Light Mean"),
+#              AnalyzeResids(light_true_array,light_est_array,1,2,"Wake Light SE"),
+#              nrow = 1)
+# 
+# grid.arrange(AnalyzeResids(light_true_array,light_est_array,2,1,"Sleep Light Mean"),
+#              AnalyzeResids(light_true_array,light_est_array,2,2,"Sleep Light SE"),
+#              nrow = 1)
 
 
 
 grid.arrange(AnalyzeResids(act_true_array,act_est_array,1,1,"Wake Activity Mean",1),
              AnalyzeResids(act_true_array,act_est_array,1,2,"Wake Activity SE",1),
              nrow = 1)
-grid.arrange(AnalyzeResids(act_true_array,act_est_array,2,1,"Wake Activity Covar 1 Mean",1),
-             AnalyzeResids(act_true_array,act_est_array,3,1,"Wake Activity Covar 2 Mean",1),
-             nrow = 1)
+
+# grid.arrange(AnalyzeResids(act_true_array,act_est_array,2,1,"Wake Activity Covar 1 Mean",1),
+#              AnalyzeResids(act_true_array,act_est_array,3,1,"Wake Activity Covar 2 Mean",1),
+#              nrow = 1)
 
 grid.arrange(AnalyzeResids(act_true_array,act_est_array,1,1,"Sleep Activity Mean",2),
              AnalyzeResids(act_true_array,act_est_array,1,2,"Sleep Activity SE",2),
              nrow = 1)
-grid.arrange(AnalyzeResids(act_true_array,act_est_array,2,1,"Sleep Activity Covar 1 Mean",2),
-             AnalyzeResids(act_true_array,act_est_array,3,1,"Sleep Activity Covar 2 Mean",2), 
-             nrow = 1)
+
+# grid.arrange(AnalyzeResids(act_true_array,act_est_array,2,1,"Sleep Activity Covar 1 Mean",2),
+#              AnalyzeResids(act_true_array,act_est_array,3,1,"Sleep Activity Covar 2 Mean",2), 
+#              nrow = 1)
 
 
 
@@ -181,9 +183,7 @@ grid.arrange(AnalyzeResids(cor_true_array,cor_est_array,1,title = "Wake Correlat
              AnalyzeResids(cor_true_array,cor_est_array,2,title = "Sleep Correlation"),
              nrow = 1)
 
-grid.arrange(AnalyzeResids(binom_true_array,binom_est_array,1,title = "Act LoD"),
-             AnalyzeResids(binom_true_array,binom_est_array,2,title = "Light LoD"),
-             nrow = 1)
+AnalyzeResids(binom_true_array,binom_est_array,1,title = "Act LoD")
 
 
 grid.arrange(AnalyzeResids(reset_true_array,reset_est_array,1,title = "RE1"),
