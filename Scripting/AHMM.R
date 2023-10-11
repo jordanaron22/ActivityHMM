@@ -73,7 +73,7 @@ logClassification <- function(time,current_state,act,emit_act,act_light_binom,ra
     if (current_state == 0){
       lognorm_dens <- log(dnorm(act[time]-rande,mu_act,sig_act)) 
     } else {
-      lognorm_dens <- log(((1-act_light_binom[1]) * (act[time]!=log(epsilon)) * dnorm(act[time]-rande,mu_act,sig_act))+
+      lognorm_dens <- log(((1-act_light_binom[1]) * (act[time]!=log(epsilon)) * dnorm(act[time],mu_act,sig_act))+
               (act_light_binom[1] * (act[time]==log(epsilon))))
     }
       
@@ -308,7 +308,7 @@ InduceMissingVec <- function(vec,prob){
 WeightedSE <- function(model, weights_vec){
   SSE <- model$residuals^2 %*% weights_vec
   n <- sum(weights_vec)
-  return(sqrt(SSE/(n)))
+  return(sqrt(SSE/(n-1.5)))
 }
 
 unregister_dopar <- function() {
@@ -554,7 +554,7 @@ params_tran_true <- c(-3,.5,1,-1,-1,1,.9,-.8,
 
 
 emit_act_true <- matrix(c(3,1,
-                            -1/3,2),byrow = T,ncol = 2)
+                          -1/3,2),byrow = T,ncol = 2)
 
 colnames(emit_act_true) <- c("Mean","Std Dev")
 rownames(emit_act_true) <- c("Wake","Sleep")
@@ -563,12 +563,15 @@ rownames(emit_act_true) <- c("Wake","Sleep")
 #Prob of being below detection limit
 act_light_binom_true <- c(.05)
 
-# re_set_true <- c(-3/4,3/4)
-# re_set_true <- c(-5/4,2/4,6/4)
-re_set_true <- c(-1,-1/2,1/2,1)
 # re_set_true <- c(0)
+# re_set_true <- c(-1/2,2)
+# re_set_true <- c(-1/2,1,2)
+re_set_true <- c(-1,-1/2,1/2,1)
 
-pi_l_true <- c(.1,.3,.45,.15)
+# pi_l_true <- c(1)
+# pi_l_true <- c(.6,.4)
+# pi_l_true <- c(.5,.4,.1)
+pi_l_true <- c(.15,.35,.4,.1)
 
 #### Simulate True Data ####
 
@@ -580,10 +583,10 @@ if (!real_data){
   
   if (large_sim){
     day_length <- 96 * 3
-    num_of_people <- 2000
+    num_of_people <- 2500
   } else {
     day_length <- 96 * (96/96) 
-    num_of_people <- 1000
+    num_of_people <- 500
   }
   
   
@@ -679,6 +682,7 @@ if(real_data){
 # act_light_binom <- act_light_binom_true_emp
 # re_set <- re_set_true
 # re_mat <- re_mat_true_emp
+# re_vec <- re_vec_true
 
 # init <- init_true
 # params_tran <- params_tran_true
@@ -686,7 +690,7 @@ if(real_data){
 # act_light_binom <- act_light_binom_true
 # re_set <- re_set_true
 # re_mat <- re_mat_true
-
+# re_vec <- re_vec_true
 
 id_mat <- apply(as.matrix(id$SEQN),2,RepCovarInd)
 
@@ -718,6 +722,8 @@ clusterExport(cl,c('ForwardInd','BackwardInd','logClassification','logSumExp','d
 foreach::getDoParRegistered()
 foreach::getDoParWorkers()
 
+
+
 print("PRE ALPHA")
 alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom,re_set)
 print("POST ALPHA")
@@ -733,11 +739,12 @@ like_diff <- new_likelihood - likelihood
 # grad_num <- grad(LogLike,params_tran)
 
 
-while(abs(like_diff) > .001){
+while(abs(like_diff) > .0001){
   likelihood <- new_likelihood
   
   weights_mat <- Marginalize(alpha,beta)
   weights_vec <- as.vector(weights_mat)
+  re_prob <- CalcProbRE(alpha,re_mat)
   # weights_vec <- as.vector(mc)
   
   
@@ -762,21 +769,28 @@ while(abs(like_diff) > .001){
   ##################
 
   act_cv_em.df <- act_cv.df %>% mutate(weights = (1-weights_vec))
-  # act_cv_em.df <- act_cv_em.df %>% mutate(mc = as.vector(mc))
   
-  act_mean <- matrix(0,ncol = 2,nrow = length(unique(act_cv_em.df$SEQN)))
+  act_mean <- matrix(0,ncol = 3,nrow = length(unique(act_cv_em.df$SEQN)))
   for (i in 1:length(unique(act_cv_em.df$SEQN))){
     act_mean[i,1] <- unique(act_cv_em.df$SEQN)[i]
     act_cv_working <- act_cv_em.df %>% filter(SEQN == unique(act_cv_em.df$SEQN)[i])
     act_mean[i,2] <- weighted.mean(act_cv_working$activity,w = act_cv_working$weights)
+    act_mean[i,3] <- sum(act_cv_working$weights)
   }
-  
-  x <- Mclust(act_mean[,2],modelName="V")
+
+  # x <- Mclust(act_mean[,2],modelName="V")
+  x <- me.weighted(data = act_mean[,2], modelName = "E",
+                   z = re_prob, weights = act_mean[,3])
+
   pi_l <- x$parameters$pro
   re_mat <- matrix(pi_l,ncol = length(pi_l),nrow = length(alpha), byrow = T)
-  
-  re_set <- x$parameters$mean - mean(act_mean[,2])
+
+
+
+  re_set <- x$parameters$mean - emit_act[1,1]
   re_vec <- x$z %*% re_set
+  
+  act_mean[,2] <- act_mean[,2] - re_vec
   
   act_cv.df <- act_cv.df %>% mutate(re = apply(as.matrix(re_vec),2,RepCovarInd))
   act_cv_em.df <- act_cv_em.df %>% mutate(re = apply(as.matrix(re_vec),2,RepCovarInd)) 
@@ -786,20 +800,30 @@ while(abs(like_diff) > .001){
   
   
   sleep_act_lm <- lm(activity ~1,data = act_cv.df, weights = weights_vec * (1 - lod_act_weight))
-  wake_act_sigma <- sum((act_cv_em.df$activity - act_cv_em.df$re - 3)^2 * act_cv_em.df$weights) / sum(act_cv_em.df$weights)
-  # wake_act_sigma <- emit_act_true_emp[1,2,1]
+  wake_act_sigma <- sqrt(sum((act_cv_em.df$activity - act_cv_em.df$re - weighted.mean(act_mean[,2],w = act_mean[,3]))^2 * 
+                          act_cv_em.df$weights) / (sum(act_cv_em.df$weights)-1.5))
   sleep_act_sigma <- WeightedSE(sleep_act_lm,weights_vec[!is.na(act_cv.df$activity)] * (1- lod_act_weight[!is.na(act_cv.df$activity)]))
 
   
   ##################
 
-  
-  emit_act[1,1] <- mean(act_mean[,2])
+  # emit_act[1,1] <- mean(act_mean[,2])
+  emit_act[1,1] <- weighted.mean(act_mean[,2],w = act_mean[,3])
+  # emit_act[1,1] <- emit_act_true[1,1]
+
   emit_act[1,2] <- wake_act_sigma
+  # emit_act[1,2] <- emit_act_true[1,2]
+
   emit_act[2,1] <- summary(sleep_act_lm)$coefficients[1]
+  # emit_act[2,1] <- emit_act_true[2,1]
+
   emit_act[2,2] <- sleep_act_sigma
+  # emit_act[2,2] <- emit_act_true[2,2]
 
   emit_act[,2] <- abs(emit_act[,2])
+
+  
+  ##################
 
 
   alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom,re_set)
@@ -809,6 +833,7 @@ while(abs(like_diff) > .001){
   like_diff <- new_likelihood - likelihood
   print(like_diff)
   likelihood_vec <- c(likelihood_vec,new_likelihood)
+  
 }
 
 
