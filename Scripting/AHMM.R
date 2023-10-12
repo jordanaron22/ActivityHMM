@@ -564,14 +564,14 @@ rownames(emit_act_true) <- c("Wake","Sleep")
 act_light_binom_true <- c(.05)
 
 # re_set_true <- c(0)
-# re_set_true <- c(-1/2,2)
+re_set_true <- c(-1/2,2)
 # re_set_true <- c(-1/2,1,2)
-re_set_true <- c(-1,-1/2,1/2,1)
+# re_set_true <- c(-1,-1/2,1/2,1)
 
 # pi_l_true <- c(1)
-# pi_l_true <- c(.6,.4)
+pi_l_true <- c(.6,.4)
 # pi_l_true <- c(.5,.4,.1)
-pi_l_true <- c(.15,.35,.4,.1)
+# pi_l_true <- c(.15,.35,.4,.1)
 
 #### Simulate True Data ####
 
@@ -684,13 +684,13 @@ if(real_data){
 # re_mat <- re_mat_true_emp
 # re_vec <- re_vec_true
 
-# init <- init_true
-# params_tran <- params_tran_true
-# emit_act <- emit_act_true
-# act_light_binom <- act_light_binom_true
-# re_set <- re_set_true
-# re_mat <- re_mat_true
-# re_vec <- re_vec_true
+init <- init_true
+params_tran <- params_tran_true
+emit_act <- emit_act_true
+act_light_binom <- act_light_binom_true
+re_set <- re_set_true
+re_mat <- re_mat_true
+re_vec <- re_vec_true
 
 id_mat <- apply(as.matrix(id$SEQN),2,RepCovarInd)
 
@@ -738,6 +738,7 @@ like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
+break
 
 while(abs(like_diff) > .0001){
   likelihood <- new_likelihood
@@ -770,25 +771,26 @@ while(abs(like_diff) > .0001){
 
   act_cv_em.df <- act_cv.df %>% mutate(weights = (1-weights_vec))
   
-  act_mean <- matrix(0,ncol = 3,nrow = length(unique(act_cv_em.df$SEQN)))
-  for (i in 1:length(unique(act_cv_em.df$SEQN))){
-    act_mean[i,1] <- unique(act_cv_em.df$SEQN)[i]
-    act_cv_working <- act_cv_em.df %>% filter(SEQN == unique(act_cv_em.df$SEQN)[i])
-    act_mean[i,2] <- weighted.mean(act_cv_working$activity,w = act_cv_working$weights)
-    act_mean[i,3] <- sum(act_cv_working$weights)
-  }
+  
+  weighted_mean.df <- act_cv_em.df %>% group_by(SEQN)%>% 
+    summarise(mean = weighted.mean(activity,weights))
+  
+  sum_weights.df <- act_cv_em.df %>% group_by(SEQN)%>% 
+    summarise(sweights = sum(weights))
+  
+  act_mean <- as.matrix(weighted_mean.df %>% mutate(sweights = sum_weights.df[,2]))
 
-  # x <- Mclust(act_mean[,2],modelName="V")
-  x <- me.weighted(data = act_mean[,2], modelName = "E",
+
+  act_clust <- me.weighted(data = act_mean[,2], modelName = "E",
                    z = re_prob, weights = act_mean[,3])
 
-  pi_l <- x$parameters$pro
+  pi_l <- act_clust$parameters$pro
   re_mat <- matrix(pi_l,ncol = length(pi_l),nrow = length(alpha), byrow = T)
 
 
 
-  re_set <- x$parameters$mean - emit_act[1,1]
-  re_vec <- x$z %*% re_set
+  re_set <- act_clust$parameters$mean - emit_act[1,1]
+  re_vec <- act_clust$z %*% re_set
   
   act_mean[,2] <- act_mean[,2] - re_vec
   
