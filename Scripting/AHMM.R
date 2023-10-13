@@ -1,4 +1,4 @@
-large_sim <- F
+large_sim <- T
 set_seed <- T
 
 real_data <- F
@@ -8,9 +8,9 @@ epsilon <- .00001
 #### Functions ####
 
 SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
-                        act_light_binom, re_set,pi_l){
+                        act_light_binom,pi_l){
   
-  re_vec <- sample(re_set,num_of_people,T,pi_l)
+  clust_index <- sample(dim(emit_act)[3],num_of_people,T,pi_l)
   
   covar_mat_tran <- t(rmultinom(num_of_people,1,rep(1/6,6)))
   covar_mat_tran <- cbind((numeric(num_of_people) + 1),covar_mat_tran[,2:6])
@@ -31,8 +31,8 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
       }
       
       
-      mu_act <- emit_act[hidden_states[i] + 1,1]
-      sig_act <- emit_act[hidden_states[i] + 1,2]
+      mu_act <- emit_act[hidden_states[i] + 1,1,clust_index[ind]]
+      sig_act <- emit_act[hidden_states[i] + 1,2,clust_index[ind]]
       
       activity[i] <-rnorm(1,mu_act,sig_act) 
       
@@ -44,7 +44,7 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
         } 
         
       } else {
-        activity[i] <- activity[i] + re_vec[ind]
+        activity[i] <- activity[i]
       }
     }
     
@@ -60,18 +60,18 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
   }
   
   
-  return(list(hidden_states_matrix,activity_matrix,covar_mat_tran,act_lod,re_vec))
+  return(list(hidden_states_matrix,activity_matrix,covar_mat_tran,act_lod,clust_index))
 }
 
-logClassification <- function(time,current_state,act,emit_act,act_light_binom,rande){
+logClassification <- function(time,current_state,act,emit_act,act_light_binom,clust_i){
   
-  mu_act <- emit_act[current_state+1,1]
-  sig_act <- emit_act[current_state+1,2]
+  mu_act <- emit_act[current_state+1,1,clust_i]
+  sig_act <- emit_act[current_state+1,2,clust_i]
   
   if (!is.na(act[time])) {
     
     if (current_state == 0){
-      lognorm_dens <- log(dnorm(act[time]-rande,mu_act,sig_act)) 
+      lognorm_dens <- log(dnorm(act[time],mu_act,sig_act)) 
     } else {
       lognorm_dens <- log(((1-act_light_binom[1]) * (act[time]!=log(epsilon)) * dnorm(act[time],mu_act,sig_act))+
               (act_light_binom[1] * (act[time]==log(epsilon))))
@@ -120,11 +120,11 @@ ChooseTran <- function(covar_tran_bool){
   }
 }
 
-Backward <- function(act,params_tran,emit_act,covar_mat_tran,act_light_binom,re_set){
+Backward <- function(act,params_tran,emit_act,covar_mat_tran,act_light_binom){
   beta_list <- foreach(ind = 1:dim(act)[2]) %:%
-    foreach(rand_ind = 1:length(re_set)) %dopar% {
+    foreach(clust_i = 1:dim(emit_act)[3]) %dopar% {
       act_ind <- act[,ind]
-      BackwardInd(act_ind,params_tran,emit_act,covar_mat_tran[ind,],act_light_binom,re_set[rand_ind])
+      BackwardInd(act_ind,params_tran,emit_act,covar_mat_tran[ind,],act_light_binom,clust_i)
     }
   
   beta <- lapply(beta_list, simplify2array)
@@ -132,7 +132,7 @@ Backward <- function(act,params_tran,emit_act,covar_mat_tran,act_light_binom,re_
   return(beta)
 }
 
-BackwardInd <- function(act, params_tran, emit_act,covar_ind_tran,act_light_binom,rande) {
+BackwardInd <- function(act, params_tran, emit_act,covar_ind_tran,act_light_binom,clust_i) {
   
   n <- length(act)
   beta <- matrix(0, ncol = 2, nrow = n)
@@ -147,16 +147,16 @@ BackwardInd <- function(act, params_tran, emit_act,covar_ind_tran,act_light_bino
     tran <- Params2Tran(params_tran,i+1,tran_ind)
     
     #State 0 from 0
-    bp_00 <- log(tran[1,1]) + logClassification(i+1,0,act,emit_act,act_light_binom,rande) + beta[i+1,1]
+    bp_00 <- log(tran[1,1]) + logClassification(i+1,0,act,emit_act,act_light_binom,clust_i) + beta[i+1,1]
     
     #State 1 from 0
-    bp_01 <- log(tran[1,2]) + logClassification(i+1,1,act,emit_act,act_light_binom,rande) + beta[i+1,2] 
+    bp_01 <- log(tran[1,2]) + logClassification(i+1,1,act,emit_act,act_light_binom,clust_i) + beta[i+1,2] 
     
     #State 0 from 1
-    bp_10 <- log(tran[2,1]) + logClassification(i+1,0,act,emit_act,act_light_binom,rande) + beta[i+1,1] 
+    bp_10 <- log(tran[2,1]) + logClassification(i+1,0,act,emit_act,act_light_binom,clust_i) + beta[i+1,1] 
     
     #State 1 from 1
-    bp_11 <- log(tran[2,2]) + logClassification(i+1,1,act,emit_act,act_light_binom,rande) + beta[i+1,2] 
+    bp_11 <- log(tran[2,2]) + logClassification(i+1,1,act,emit_act,act_light_binom,clust_i) + beta[i+1,2] 
     
     
     beta[i,1] <- logSumExp(c(bp_00,bp_01))
@@ -167,13 +167,13 @@ BackwardInd <- function(act, params_tran, emit_act,covar_ind_tran,act_light_bino
   
 }
 
-Forward <- function(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom,rande_vec){
+Forward <- function(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom){
   # alpha_list <- list()
   alpha_list <- foreach(ind = 1:dim(act)[2]) %:%
-    foreach(rand_ind = 1:length(rande_vec)) %dopar% {
+    foreach(clust_i = 1:dim(emit_act)[3]) %dopar% {
       act_ind <- act[,ind]
     
-      ForwardInd(act_ind,init,params_tran,emit_act,covar_mat_tran[ind,],act_light_binom,rande_vec[rand_ind])
+      ForwardInd(act_ind,init,params_tran,emit_act,covar_mat_tran[ind,],act_light_binom,clust_i)
     }
   
   alpha <- lapply(alpha_list, simplify2array)
@@ -182,29 +182,29 @@ Forward <- function(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom
 }
 
 
-ForwardInd <- function(act, init, params_tran, emit_act,covar_ind_tran,act_light_binom,rande) {
+ForwardInd <- function(act, init, params_tran, emit_act,covar_ind_tran,act_light_binom,clust_i) {
   alpha <- matrix(0, ncol = 2, nrow=length(act))
   tran_ind <- ChooseTran(covar_ind_tran)
   
-  alpha[1,1] <- log(init[1]) + logClassification(1,0,act,emit_act,act_light_binom,rande)
+  alpha[1,1] <- log(init[1]) + logClassification(1,0,act,emit_act,act_light_binom,clust_i)
   
-  alpha[1,2] <- log(init[2]) + logClassification(1,1,act,emit_act,act_light_binom,rande)
+  alpha[1,2] <- log(init[2]) + logClassification(1,1,act,emit_act,act_light_binom,clust_i)
   
   for (i in 2:length(act)){
     
     tran <- Params2Tran(params_tran,i,tran_ind)
     
     #From state 0 to 0
-    fp_00 <- alpha[i-1,1] + log(tran[1,1]) + logClassification(i,0,act,emit_act,act_light_binom,rande)
+    fp_00 <- alpha[i-1,1] + log(tran[1,1]) + logClassification(i,0,act,emit_act,act_light_binom,clust_i)
     
     #From state 1 to 0
-    fp_10 <- alpha[i-1,2] + log(tran[2,1]) + logClassification(i,0,act,emit_act,act_light_binom,rande)
+    fp_10 <- alpha[i-1,2] + log(tran[2,1]) + logClassification(i,0,act,emit_act,act_light_binom,clust_i)
     
     #From state 0 to 1
-    fp_01 <- alpha[i-1,1] + log(tran[1,2]) + logClassification(i,1,act,emit_act,act_light_binom,rande)
+    fp_01 <- alpha[i-1,1] + log(tran[1,2]) + logClassification(i,1,act,emit_act,act_light_binom,clust_i)
     
     #From state 1 to 1
-    fp_11 <- alpha[i-1,2] + log(tran[2,2]) + logClassification(i,1,act,emit_act,act_light_binom,rande)
+    fp_11 <- alpha[i-1,2] + log(tran[2,2]) + logClassification(i,1,act,emit_act,act_light_binom,clust_i)
     
     alpha[i,1] <- logSumExp(c(fp_00,fp_10))
     alpha[i,2] <- logSumExp(c(fp_01,fp_11))
@@ -213,7 +213,7 @@ ForwardInd <- function(act, init, params_tran, emit_act,covar_ind_tran,act_light
   return(alpha)
 }
 
-CalcInit <- function(alpha, beta,re_mat){
+CalcInit <- function(alpha, beta,pi_l){
 
   num_obs <- dim(alpha[[1]][,,1])[1]
   time <- 1
@@ -221,12 +221,12 @@ CalcInit <- function(alpha, beta,re_mat){
   init_1_vec <- c()
   
   for(ind in 1:length(alpha)){ 
-    ind_like <- logSumExp(c(as.vector(t(t(alpha[[ind]][num_obs,,]) + log(re_mat[ind,])))))
+    ind_like <- logSumExp(c(as.vector(t(t(alpha[[ind]][num_obs,,]) + log(pi_l)))))
     
-    init_0_vec <- c(init_0_vec, alpha[[ind]][time,1,] + beta[[ind]][time,1,] + log(re_mat[ind,]) - ind_like)
+    init_0_vec <- c(init_0_vec, alpha[[ind]][time,1,] + beta[[ind]][time,1,] + log(pi_l) - ind_like)
     
     
-    init_1_vec <- c(init_1_vec, alpha[[ind]][time,2,] + beta[[ind]][time,2,] + log(re_mat[ind,]) - ind_like)
+    init_1_vec <- c(init_1_vec, alpha[[ind]][time,2,] + beta[[ind]][time,2,] + log(pi_l) - ind_like)
   }
   
   
@@ -245,12 +245,12 @@ logit <- function(x){
   return(log(x/(1-x)))
 }
 
-CalcLikelihood <- function(alpha,re_mat){
+CalcLikelihood <- function(alpha,pi_l){
   num_obs <- dim(alpha[[1]][,,1])[1]
   like_vec <- c()
   #i is number of people
   for (i in 1:length(alpha)){
-    ind_like <- logSumExp(c(SumOverREIndTime(alpha,re_mat,i,num_obs)))
+    ind_like <- logSumExp(c(SumOverREIndTime(alpha,pi_l,i,num_obs)))
     like_vec <- c(like_vec,ind_like)
   }
   return(sum(like_vec))
@@ -272,10 +272,10 @@ CalcEmpiricTran <- function(mc,covar_mat_tran){
   return(trans)
 }
 
-CalcEmpiricAct <- function(mc,act,act_lod,re_vec_true){
+CalcEmpiricAct <- function(mc,act,act_lod,clust_ind_true){
   
-  state0_norm <- c()
-  
+
+  state0_list <- vector(mode = "list", length = max(clust_ind_true))
   state1_norm <- c()
   
   
@@ -283,16 +283,23 @@ CalcEmpiricAct <- function(mc,act,act_lod,re_vec_true){
     current_act <- act[,ind]
     current_mc <- mc[,ind]
     current_lod <- act_lod[,ind]
+    clust <- clust_ind_true[ind]
     
     current_act <- current_act[current_lod==0]
     current_mc <- current_mc[current_lod==0]
-    
-    state0_norm <- c(state0_norm,current_act[current_mc == 0]-re_vec_true[ind])
+  
+    state0_list[[clust]] <- c(state0_list[[clust]],current_act[current_mc == 0])
     state1_norm <- c(state1_norm,current_act[current_mc == 1])
   }
   
-  emit_act_emp_true <- matrix(c(mean(state0_norm),sqrt(var(state0_norm)),
-                               mean(state1_norm),sqrt(var(state1_norm))),byrow=T,ncol = 2)
+  stnrd_state0 <- unlist(mapply('-',state0_list,unlist(lapply(state0_list,mean)), SIMPLIFY= FALSE))
+  
+  
+  emit_act_emp_true <- array(dim = c(2,2,length(mean_set_true)))
+  emit_act_emp_true[1,1,] <- unlist(lapply(state0_list,mean))
+  emit_act_emp_true[1,2,] <- sqrt(var(stnrd_state0))
+  emit_act_emp_true[2,1,] <- mean(state1_norm)
+  emit_act_emp_true[2,2,] <- sqrt(var(state1_norm))
   
   return(emit_act_emp_true)
   
@@ -322,7 +329,7 @@ LogLike <- function(params_tran){
   return(-CalcLikelihood(alpha))
 }
 
-CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,re_mat,re_set, return_grad = F){
+CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l, return_grad = F){
   
   len <- dim(act)[1]
   
@@ -336,7 +343,7 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
   for (init_state in 1:2){
     for (new_state in 1:2){
       
-      tran_vals_re <- foreach(re_ind = 1:dim(re_mat)[2]) %:% 
+      tran_vals_re <- foreach(re_ind = 1:dim(emit_act)[3]) %:% 
         foreach(ind = 1:length(alpha), .combine = 'cbind')%dopar% {
           
           tran_ind <- ChooseTran(covar_mat_tran[ind,])
@@ -348,17 +355,17 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
           
           alpha_ind <- alpha[[ind]]
           beta_ind <- beta[[ind]]
-          likelihood <- logSumExp(SumOverREIndTime(alpha,re_mat,ind,len))
+          likelihood <- logSumExp(SumOverREIndTime(alpha,pi_l,ind,len))
           
           act_ind <- act[,ind]
           
           exp(alpha_ind[1:(len-1),init_state,re_ind] + 
                 beta_ind[2:len,new_state,re_ind] + 
                 log(tran_vec[tran_vec_ind,]) + 
-                log(re_mat[ind,re_ind]) + 
+                log(pi_l[re_ind]) + 
                 unlist(lapply(c(2:len),
                               logClassification,current_state = new_state-1,act = act_ind,
-                              emit_act=emit_act, act_light_binom=act_light_binom,rande = re_set[re_ind])) - 
+                              emit_act=emit_act, act_light_binom=act_light_binom,clust_i = re_ind)) - 
                 likelihood) 
         }
       
@@ -457,15 +464,14 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
   }
 }
 
-SumOverREIndTime <- function(fb,re_mat,ind,time, add_re = T){
+SumOverREIndTime <- function(fb,pi_l,ind,time, add_re = T){
   
   fb_ind <- fb[[ind]]
-  re_vec <- re_mat[ind,]
   
   fb_sum <- numeric(2)
   if (add_re){
-    fb_sum[1] <- logSumExp(c(fb_ind[time,1,] + log(re_vec)))
-    fb_sum[2] <- logSumExp(c(fb_ind[time,2,] + log(re_vec)))
+    fb_sum[1] <- logSumExp(c(fb_ind[time,1,] + log(pi_l)))
+    fb_sum[2] <- logSumExp(c(fb_ind[time,2,] + log(pi_l)))
   } else {
     fb_sum[1] <- logSumExp(c(fb_ind[time,1,]))
     fb_sum[2] <- logSumExp(c(fb_ind[time,2,]))
@@ -475,7 +481,7 @@ SumOverREIndTime <- function(fb,re_mat,ind,time, add_re = T){
 }
 
 
-Marginalize <- function(alpha,beta){
+Marginalize <- function(alpha,beta,pi_l){
   alpha_beta <- simplify2array(alpha) + simplify2array(beta)
   #instead of population level re_mat
   #should it be ind level re_weights
@@ -483,7 +489,7 @@ Marginalize <- function(alpha,beta){
   for (ind in 1:dim(alpha_beta)[4]){
     for (re_ind in 1:dim(alpha_beta)[3]){
       # alpha_beta[,,re_ind,ind] <- alpha_beta[,,re_ind,ind] + log(re_weights[ind,re_ind])
-      alpha_beta[,,re_ind,ind] <- alpha_beta[,,re_ind,ind] + log(re_mat[ind,re_ind])
+      alpha_beta[,,re_ind,ind] <- alpha_beta[,,re_ind,ind] + log(pi_l[re_ind])
     }
   }
   
@@ -501,7 +507,7 @@ Marginalize <- function(alpha,beta){
   return(alpha_beta)
 }
 
-CalcProbRE <- function(alpha,re_mat){
+CalcProbRE <- function(alpha,pi_l){
   #if using double check this works
   
   len <- dim(alpha[[1]])[1]
@@ -513,7 +519,7 @@ CalcProbRE <- function(alpha,re_mat){
   
   for (ind in 1:length(alpha)){
     for (re_ind in 1:re_len){
-      re_weight_vec[re_ind] <- logSumExp(alpha[[ind]][len,,re_ind]) + log(re_mat[ind,re_ind])
+      re_weight_vec[re_ind] <- logSumExp(alpha[[ind]][len,,re_ind]) + log(pi_l[re_ind])
     }
     
     for (re_ind in 1:re_len){
@@ -545,16 +551,32 @@ library(mclust)
 # library(emdbook)
 
 
+
 #### Set True Parameters ####
+
+
+# mean_set_true <- c(0)
+# mean_set_true <- c(2.5,4)
+# mean_set_true <- c(2,3,4)
+mean_set_true <- c(2,3,4,5)
+
+# pi_l_true <- c(1)
+# pi_l_true <- c(.6,.4)
+# pi_l_true <- c(.5,.4,.1)
+pi_l_true <- c(.15,.35,.4,.1)
+
 init_true <- c(.3,.7)
 
 
 params_tran_true <- c(-3,.5,1,-1,-1,1,.9,-.8,
                       -2.2,.3,.6,.6,-.6,-.6,-.75,.8)
 
+emit_act_true <- array(dim = c(2,2,length(mean_set_true)))
+emit_act_true[1,1,] <- mean_set_true
+emit_act_true[1,2,] <- 1
+emit_act_true[2,1,] <- -1/3
+emit_act_true[2,2,] <- 2
 
-emit_act_true <- matrix(c(3,1,
-                          -1/3,2),byrow = T,ncol = 2)
 
 colnames(emit_act_true) <- c("Mean","Std Dev")
 rownames(emit_act_true) <- c("Wake","Sleep")
@@ -562,16 +584,6 @@ rownames(emit_act_true) <- c("Wake","Sleep")
 
 #Prob of being below detection limit
 act_light_binom_true <- c(.05)
-
-# re_set_true <- c(0)
-re_set_true <- c(-1/2,2)
-# re_set_true <- c(-1/2,1,2)
-# re_set_true <- c(-1,-1/2,1/2,1)
-
-# pi_l_true <- c(1)
-pi_l_true <- c(.6,.4)
-# pi_l_true <- c(.5,.4,.1)
-# pi_l_true <- c(.15,.35,.4,.1)
 
 #### Simulate True Data ####
 
@@ -585,7 +597,7 @@ if (!real_data){
     day_length <- 96 * 3
     num_of_people <- 2500
   } else {
-    day_length <- 96 * (96/96) 
+    day_length <- 48 * (96/96) 
     num_of_people <- 500
   }
   
@@ -594,25 +606,22 @@ if (!real_data){
   id <- data.frame(SEQN = c(1:num_of_people))
   
   simulated_hmm <- SimulateHMM(day_length,num_of_people,init_true,params_tran_true,emit_act_true,
-                               act_light_binom_true, re_set_true, pi_l_true)
+                               act_light_binom_true, pi_l_true)
   
   mc <- simulated_hmm[[1]]
   act <- simulated_hmm[[2]]
   covar_mat_tran <- simulated_hmm[[3]]
   act_lod <- simulated_hmm[[4]]
-  re_vec_true <- simulated_hmm[[5]]
-  re_mat_true <- matrix(pi_l_true, 
-                            ncol = length(re_set_true), nrow = num_of_people, byrow = T)
+  clust_ind_true <- simulated_hmm[[5]]
   
   trans_true_emp <- CalcEmpiricTran(mc,covar_mat_tran)
   init_true_emp <- c(sum(mc[1,] == 0),sum(mc[1,] == 1)) / dim(mc)[2]
   
-  emit_act_true_emp <- CalcEmpiricAct(mc,act,act_lod,re_vec_true)
+  emit_act_true_emp <- CalcEmpiricAct(mc,act,act_lod,clust_ind_true)
   
   act_light_binom_true_emp <- c(sum(act_lod[mc==1]==1)/length(act_lod[mc==1]))
   
-  re_mat_true_emp <- matrix(table(re_vec_true)/ length(re_vec_true), 
-                            ncol = length(re_set_true), nrow = num_of_people, byrow = T)
+  pi_l_true_emp <- table(clust_ind_true)/ length(clust_ind_true)
   
   
   
@@ -627,16 +636,16 @@ init[2] <- 1 - init[1]
 
 params_tran <- params_tran_true + runif(16,-.3,.3)
 
-emit_act <- matrix(c(runif(1,1,5),runif(1,1/2,3/2),
-                       runif(1,-2/3,0),runif(1,1,3)), byrow = T, 2)
+emit_act <- emit_act_true
+emit_act[1,1,]  <- emit_act[1,1,] + runif(length(emit_act[1,1,]),-1/2,1/2)
+emit_act[1,2,] <- emit_act[1,2,] + runif(1,-1/4,1/4)
+emit_act[2,1,] <- emit_act[2,1,] + runif(1,-1/4,1/4)
+emit_act[2,2,] <- emit_act[2,2,] + runif(1,-1/2,1/2)
 
 act_light_binom <- c(runif(1,0,.1))
 
-re_set <- re_set_true + runif(length(re_set_true),-.1,.1)
-
-re_mat_temp <- re_mat_true[1,] + runif(length(re_set_true))
-re_mat_temp <- re_mat_temp/sum(re_mat_temp)
-re_mat <- matrix(re_mat_temp,ncol = length(re_set_true),nrow = num_of_people, byrow = T)
+pi_l <- pi_l_true + runif(length(pi_l_true),0,.25)
+pi_l <- pi_l/sum(pi_l)
 
 #### Load in Real Data ####
 if(real_data){
@@ -668,6 +677,7 @@ if(real_data){
   
   params_tran <- c(-3,.01,.01,.01,.01,.01,.01,.01,-2.2,.01,.01,.01,.01,.01,.01,.01)
   
+  #need to fix this
   emit_act <- matrix(c(4,2,
                        0,2), byrow = T, 2)
   
@@ -680,23 +690,20 @@ if(real_data){
 # params_tran <- params_tran_true
 # emit_act <- emit_act_true_emp
 # act_light_binom <- act_light_binom_true_emp
-# re_set <- re_set_true
-# re_mat <- re_mat_true_emp
-# re_vec <- re_vec_true
+# pi_l <- pi_l_true_emp
 
-init <- init_true
-params_tran <- params_tran_true
-emit_act <- emit_act_true
-act_light_binom <- act_light_binom_true
-re_set <- re_set_true
-re_mat <- re_mat_true
-re_vec <- re_vec_true
+# init <- init_true
+# params_tran <- params_tran_true
+# emit_act <- emit_act_true
+# act_light_binom <- act_light_binom_true
+# pi_l <- pi_l_true
+
 
 id_mat <- apply(as.matrix(id$SEQN),2,RepCovarInd)
 
 act_cv.df <- data.frame(activity = as.vector(act),
                         SEQN = id_mat,
-                        re = apply(as.matrix(re_vec_true),2,RepCovarInd))
+                        cmean = apply(as.matrix(mean_set_true[clust_ind_true]),2,RepCovarInd))
 
 
 
@@ -725,35 +732,33 @@ foreach::getDoParWorkers()
 
 
 print("PRE ALPHA")
-alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom,re_set)
+alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom)
 print("POST ALPHA")
-beta <- Backward(act,params_tran,emit_act,covar_mat_tran,act_light_binom,re_set)
+beta <- Backward(act,params_tran,emit_act,covar_mat_tran,act_light_binom)
 
 # apply(alpha[[2]][,,1]+beta[[2]][,,1],1,logSumExp)
 
-new_likelihood <- CalcLikelihood(alpha,re_mat)
+new_likelihood <- CalcLikelihood(alpha,pi_l)
 likelihood_vec <- c(new_likelihood)
 likelihood <- -Inf
 like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
-break
-
-while(abs(like_diff) > .0001){
+while(abs(like_diff) > .0001 ){
   likelihood <- new_likelihood
   
-  weights_mat <- Marginalize(alpha,beta)
+  weights_mat <- Marginalize(alpha,beta,pi_l)
   weights_vec <- as.vector(weights_mat)
-  re_prob <- CalcProbRE(alpha,re_mat)
+  re_prob <- CalcProbRE(alpha,pi_l)
   # weights_vec <- as.vector(mc)
   
   
   ##################
   
-  init <- CalcInit(alpha,beta,re_mat)
+  init <- CalcInit(alpha,beta,pi_l)
 
-  gradhess <- CalcTran(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,re_mat,re_set)
+  gradhess <- CalcTran(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l)
   grad <- gradhess[[1]]
   hess <- gradhess[[2]]
   params_tran <- params_tran - solve(hess,grad)
@@ -785,53 +790,57 @@ while(abs(like_diff) > .0001){
                    z = re_prob, weights = act_mean[,3])
 
   pi_l <- act_clust$parameters$pro
-  re_mat <- matrix(pi_l,ncol = length(pi_l),nrow = length(alpha), byrow = T)
 
-
-
-  re_set <- act_clust$parameters$mean - emit_act[1,1]
-  re_vec <- act_clust$z %*% re_set
+  mean_set <- act_clust$z %*% emit_act[1,1,]
   
-  act_mean[,2] <- act_mean[,2] - re_vec
+  act_mean[,2] <- act_mean[,2] - mean_set
   
-  act_cv.df <- act_cv.df %>% mutate(re = apply(as.matrix(re_vec),2,RepCovarInd))
-  act_cv_em.df <- act_cv_em.df %>% mutate(re = apply(as.matrix(re_vec),2,RepCovarInd)) 
+  act_cv.df <- act_cv.df %>% mutate(cmean = apply(as.matrix(mean_set),2,RepCovarInd))
+  act_cv_em.df <- act_cv_em.df %>% mutate(cmean = apply(as.matrix(mean_set),2,RepCovarInd)) 
   
   
   ##################
   
   
   sleep_act_lm <- lm(activity ~1,data = act_cv.df, weights = weights_vec * (1 - lod_act_weight))
-  wake_act_sigma <- sqrt(sum((act_cv_em.df$activity - act_cv_em.df$re - weighted.mean(act_mean[,2],w = act_mean[,3]))^2 * 
+  wake_act_sigma <- sqrt(sum((act_cv_em.df$activity - act_cv_em.df$cmean - weighted.mean(act_mean[,2],w = act_mean[,3]))^2 * 
                           act_cv_em.df$weights) / (sum(act_cv_em.df$weights)-1.5))
   sleep_act_sigma <- WeightedSE(sleep_act_lm,weights_vec[!is.na(act_cv.df$activity)] * (1- lod_act_weight[!is.na(act_cv.df$activity)]))
 
   
   ##################
 
-  # emit_act[1,1] <- mean(act_mean[,2])
-  emit_act[1,1] <- weighted.mean(act_mean[,2],w = act_mean[,3])
-  # emit_act[1,1] <- emit_act_true[1,1]
+  emit_act[1,1,] <- act_clust$parameters$mean
+  # emit_act[1,1,] <- emit_act_true[1,1,]
 
-  emit_act[1,2] <- wake_act_sigma
-  # emit_act[1,2] <- emit_act_true[1,2]
+  emit_act[1,2,] <- wake_act_sigma
+  # emit_act[1,2,] <- emit_act_true[1,2,]
 
-  emit_act[2,1] <- summary(sleep_act_lm)$coefficients[1]
-  # emit_act[2,1] <- emit_act_true[2,1]
+  emit_act[2,1,] <- summary(sleep_act_lm)$coefficients[1]
+  # emit_act[2,1,] <- emit_act_true[2,1,]
 
-  emit_act[2,2] <- sleep_act_sigma
-  # emit_act[2,2] <- emit_act_true[2,2]
+  emit_act[2,2,] <- sleep_act_sigma
+  # emit_act[2,2,] <- emit_act_true[2,2,]
 
-  emit_act[,2] <- abs(emit_act[,2])
+  emit_act[,2,] <- abs(emit_act[,2,])
 
   
   ##################
-
-
-  alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom,re_set)
-  beta <- Backward(act,params_tran,emit_act,covar_mat_tran,act_light_binom,re_set)
   
-  new_likelihood <- CalcLikelihood(alpha,re_mat)
+  #Reorder to avoid label switching
+  #Cluster means go from small to large
+  reord_inds <- order(emit_act[1,1,])
+  emit_act <- emit_act[,,reord_inds]
+  pi_l <- pi_l[reord_inds]
+  
+  ##################
+  
+
+
+  alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom)
+  beta <- Backward(act,params_tran,emit_act,covar_mat_tran,act_light_binom)
+  
+  new_likelihood <- CalcLikelihood(alpha,pi_l)
   like_diff <- new_likelihood - likelihood
   print(like_diff)
   likelihood_vec <- c(likelihood_vec,new_likelihood)
@@ -840,11 +849,11 @@ while(abs(like_diff) > .0001){
 
 
 if (!real_data){
-  true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,re_set_true,re_mat_true_emp[1,])
-  est_params <- list(init,params_tran,emit_act,act_light_binom,re_set,pi_l)
+  true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,pi_l_true_emp)
+  est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
   params_to_save <- list(true_params,est_params,likelihood_vec)
 } else {
-  est_params <- list(init,params_tran,emit_act,act_light_binom,re_set,pi_l)
+  est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
   params_to_save <- list(est_params,likelihood_vec)
 }
   
