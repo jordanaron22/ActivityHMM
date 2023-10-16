@@ -1,4 +1,4 @@
-large_sim <- T
+large_sim <- F
 set_seed <- T
 
 real_data <- F
@@ -533,6 +533,53 @@ CalcProbRE <- function(alpha,pi_l){
 }
 
 RepCovarInd <- function(covar_ind){return(t(replicate(day_length, covar_ind)))}
+
+ClassSum <- function(time,current_state,act,emit_act,act_light_binom,ind){
+  num_clust <- dim(emit_act)[3]
+  working_class <- numeric(num_clust)
+  
+  for (clust_ind in 1:num_clust){
+    working_class[clust_ind] <- logClassification(time,current_state,act[,ind],emit_act,act_light_binom,clust_ind) + log(pi_l[clust_ind])
+  }
+  
+  
+  working_class_sum <- logSumExp(c(working_class))
+  if (current_state == 0 ){
+    working_class_sum <- working_class_sum+log(1-act_light_binom)
+    
+    if(act[time,ind] == log(epsilon)){
+      working_class_sum <- logSumExp(c(working_class_sum,log(act_light_binom)))
+    }
+  }
+  return(working_class_sum)
+}
+
+ViterbiInd <- function(ind){
+  
+  
+  viterbi_mat <- matrix(NA,2,day_length)
+  viterbi_mat[1,1] <- log(init[1]) + ClassSum(1,0,act,emit_act,act_light_binom,ind)
+  viterbi_mat[2,1] <- log(init[2]) + ClassSum(1,1,act,emit_act,act_light_binom,ind)
+  
+  
+  for (time in 2:day_length){
+    
+    tran_ind <- ChooseTran(covar_mat_tran[ind,])
+    tran <- Params2Tran(params_tran,time,tran_ind)
+    
+    viterbi_mat[1,time] <- ClassSum(time,0,act,emit_act,act_light_binom,ind)+ 
+      max(viterbi_mat[1,time-1] + log(tran[1,1]),
+          viterbi_mat[2,time-1] + log(tran[2,1]))
+    
+    
+    viterbi_mat[2,time] <- ClassSum(time,1,act,emit_act,act_light_binom,ind) + 
+      max(viterbi_mat[1,time-1] + log(tran[1,2]),
+          viterbi_mat[2,time-1] + log(tran[2,2]))
+  }
+  
+  decoded_mc <- apply(viterbi_mat,2,which.max) - 1
+  return(decoded_mc)
+}
 #### User Settings Start Here ####
 
 library(matrixStats)
@@ -575,7 +622,7 @@ emit_act_true <- array(dim = c(2,2,length(mean_set_true)))
 emit_act_true[1,1,] <- mean_set_true
 emit_act_true[1,2,] <- 1
 emit_act_true[2,1,] <- -1/3
-emit_act_true[2,2,] <- 2
+emit_act_true[2,2,] <- 2/3
 
 
 colnames(emit_act_true) <- c("Mean","Std Dev")
@@ -597,7 +644,7 @@ if (!real_data){
     day_length <- 96 * 3
     num_of_people <- 2500
   } else {
-    day_length <- 48 * (96/96) 
+    day_length <- 96 * (96/96) 
     num_of_people <- 500
   }
   
@@ -707,6 +754,8 @@ act_cv.df <- data.frame(activity = as.vector(act),
 
 
 
+break
+
 print("PRE PAR")
 
 if ((parallel::detectCores() - 1) > 8){
@@ -744,6 +793,8 @@ likelihood <- -Inf
 like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
+
+break
 
 while(abs(like_diff) > .0001 ){
   likelihood <- new_likelihood
@@ -848,13 +899,17 @@ while(abs(like_diff) > .0001 ){
 }
 
 
+decoded_mat <- sapply(c(1:num_of_people), ViterbiInd)
+
+
 if (!real_data){
   true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,pi_l_true_emp)
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
-  params_to_save <- list(true_params,est_params,likelihood_vec)
+  mc_list <- list(mc,decoded_mat,sum(decoded_mat == mc) / (num_of_people * day_length))
+  params_to_save <- list(true_params,est_params,likelihood_vec,mc_list)
 } else {
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
-  params_to_save <- list(est_params,likelihood_vec)
+  params_to_save <- list(est_params,likelihood_vec,decoded_mat)
 }
   
   
@@ -866,4 +921,9 @@ unregister_dopar()
 
 
 #####################
+
+
+  
+
+
 
