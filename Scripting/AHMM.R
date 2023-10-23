@@ -1,16 +1,27 @@
-large_sim <- F
+large_sim <- T
 set_seed <- T
+# sim_num <- 12345
+sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
 
 real_data <- F
-epsilon <- .00001
+epsilon <- 1e-5
+
+fixed_effects <- T
+
+RE_type <- "norm"
+RE_par1 <- 0
+RE_par2 <- 2
+RE_num <- 4
 
 
 #### Functions ####
 
 SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
-                        act_light_binom,pi_l){
+                        act_light_binom,pi_l,re_set){
   
-  clust_index <- sample(dim(emit_act)[3],num_of_people,T,pi_l)
+  if(RE_type == "disc"){re_vec <- sample(re_set,num_of_people,T,pi_l)}
+  if(RE_type == "norm"){re_vec <- rnorm(num_of_people,RE_par1,RE_par2)}
+  if(RE_type == "unif"){re_vec <- runif(num_of_people,RE_par1,RE_par2)}
   
   covar_mat_tran <- t(rmultinom(num_of_people,1,rep(1/6,6)))
   covar_mat_tran <- cbind((numeric(num_of_people) + 1),covar_mat_tran[,2:6])
@@ -30,9 +41,9 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
         hidden_states[i] <- rbinom(1,1,tran[hidden_states[i-1] + 1,2])
       }
       
-      
-      mu_act <- emit_act[hidden_states[i] + 1,1,clust_index[ind]]
-      sig_act <- emit_act[hidden_states[i] + 1,2,clust_index[ind]]
+      mu_act <- emit_act[hidden_states[i] + 1,1]
+      sig_act <- emit_act[hidden_states[i] + 1,2]
+        
       
       activity[i] <-rnorm(1,mu_act,sig_act) 
       
@@ -44,7 +55,7 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
         } 
         
       } else {
-        activity[i] <- activity[i]
+        activity[i] <- activity[i] + re_vec[ind]
       }
     }
     
@@ -60,7 +71,7 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
   }
   
   
-  return(list(hidden_states_matrix,activity_matrix,covar_mat_tran,act_lod,clust_index))
+  return(list(hidden_states_matrix,activity_matrix,covar_mat_tran,act_lod,re_vec))
 }
 
 logClassification <- function(time,current_state,act,emit_act,act_light_binom,clust_i){
@@ -275,7 +286,7 @@ CalcEmpiricTran <- function(mc,covar_mat_tran){
 CalcEmpiricAct <- function(mc,act,act_lod,clust_ind_true){
   
 
-  state0_list <- vector(mode = "list", length = max(clust_ind_true))
+  state0_list <- vector(mode = "list", length = length(unique(clust_ind_true)))
   state1_norm <- c()
   
   
@@ -544,7 +555,7 @@ ClassSum <- function(time,current_state,act,emit_act,act_light_binom,ind){
   
   
   working_class_sum <- logSumExp(c(working_class))
-  if (current_state == 0 ){
+  if (current_state == 1 ){
     working_class_sum <- working_class_sum+log(1-act_light_binom)
     
     if(act[time,ind] == log(epsilon)){
@@ -600,17 +611,19 @@ library(mclust)
 
 
 #### Set True Parameters ####
+central_mean <- 6
 
+# re_set <- c(0)
+# re_set <- c(-1.5,1.5)
+# re_set <- c(-1,0,1)
+re_set <- c(-3,-1,1,3)
 
-# mean_set_true <- c(0)
-# mean_set_true <- c(2.5,4)
-# mean_set_true <- c(2,3,4)
-mean_set_true <- c(2,3,4,5)
+mean_set_true <- central_mean + re_set
 
 # pi_l_true <- c(1)
-# pi_l_true <- c(.6,.4)
-# pi_l_true <- c(.5,.4,.1)
-pi_l_true <- c(.15,.35,.4,.1)
+# pi_l_true <- c(.5,.5)
+# pi_l_true <- c(1/3,1/3,1/3)
+pi_l_true <- c(.15,.35,.35,.15)
 
 init_true <- c(.3,.7)
 
@@ -620,14 +633,16 @@ params_tran_true <- c(-3,.5,1,-1,-1,1,.9,-.8,
 
 emit_act_true <- array(dim = c(2,2,length(mean_set_true)))
 emit_act_true[1,1,] <- mean_set_true
-emit_act_true[1,2,] <- 1
-emit_act_true[2,1,] <- -1/3
-emit_act_true[2,2,] <- 2/3
+emit_act_true[1,2,] <- 3
+emit_act_true[2,1,] <- 0
+emit_act_true[2,2,] <- 2
 
 
 colnames(emit_act_true) <- c("Mean","Std Dev")
 rownames(emit_act_true) <- c("Wake","Sleep")
 
+emit_act_true_sim <- emit_act_true[,,1]
+emit_act_true_sim[1,1] <- central_mean
 
 #Prob of being below detection limit
 act_light_binom_true <- c(.05)
@@ -635,25 +650,23 @@ act_light_binom_true <- c(.05)
 #### Simulate True Data ####
 
 if (!real_data){
-  
-  sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
   if (is.na(sim_num)){sim_num <- 1}
   if (set_seed){set.seed(sim_num)}
   
   if (large_sim){
     day_length <- 96 * 3
-    num_of_people <- 2500
+    num_of_people <- 2000
   } else {
-    day_length <- 96 * (96/96) 
-    num_of_people <- 500
+    day_length <- 96  
+    num_of_people <- 250
   }
   
   
   n <- day_length * num_of_people
   id <- data.frame(SEQN = c(1:num_of_people))
   
-  simulated_hmm <- SimulateHMM(day_length,num_of_people,init_true,params_tran_true,emit_act_true,
-                               act_light_binom_true, pi_l_true)
+  simulated_hmm <- SimulateHMM(day_length,num_of_people,init_true,params_tran_true,emit_act_true_sim,
+                               act_light_binom_true, pi_l_true,re_set)
   
   mc <- simulated_hmm[[1]]
   act <- simulated_hmm[[2]]
@@ -664,7 +677,9 @@ if (!real_data){
   trans_true_emp <- CalcEmpiricTran(mc,covar_mat_tran)
   init_true_emp <- c(sum(mc[1,] == 0),sum(mc[1,] == 1)) / dim(mc)[2]
   
-  emit_act_true_emp <- CalcEmpiricAct(mc,act,act_lod,clust_ind_true)
+  # emit_act_true_emp <- CalcEmpiricAct(mc,act,act_lod,clust_ind_true)
+  ###NEED TO THINK ABOUT THIS MORE
+  emit_act_true_emp <- emit_act_true
   
   act_light_binom_true_emp <- c(sum(act_lod[mc==1]==1)/length(act_lod[mc==1]))
   
@@ -682,6 +697,9 @@ init[2] <- 1 - init[1]
 
 
 params_tran <- params_tran_true + runif(16,-.3,.3)
+if (!fixed_effects){
+  params_tran[c(2:6,10:14)] <- 0
+}
 
 emit_act <- emit_act_true
 emit_act[1,1,]  <- emit_act[1,1,] + runif(length(emit_act[1,1,]),-1/2,1/2)
@@ -739,22 +757,23 @@ if(real_data){
 # act_light_binom <- act_light_binom_true_emp
 # pi_l <- pi_l_true_emp
 
-# init <- init_true
-# params_tran <- params_tran_true
-# emit_act <- emit_act_true
-# act_light_binom <- act_light_binom_true
-# pi_l <- pi_l_true
+init <- init_true
+params_tran <- params_tran_true
+emit_act <- emit_act_true
+act_light_binom <- act_light_binom_true
+pi_l <- pi_l_true
 
 
 id_mat <- apply(as.matrix(id$SEQN),2,RepCovarInd)
 
 act_cv.df <- data.frame(activity = as.vector(act),
-                        SEQN = id_mat,
-                        cmean = apply(as.matrix(mean_set_true[clust_ind_true]),2,RepCovarInd))
+                        SEQN = id_mat)
+
+if(fixed_effects == F){
+  covar_mat_tran[,2:dim(covar_mat_tran)[2]] <- 0
+}
 
 
-
-break
 
 print("PRE PAR")
 
@@ -779,7 +798,6 @@ foreach::getDoParRegistered()
 foreach::getDoParWorkers()
 
 
-
 print("PRE ALPHA")
 alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom)
 print("POST ALPHA")
@@ -794,35 +812,35 @@ like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
-break
 
-while(abs(like_diff) > .0001 ){
+while(abs(like_diff) > 1e-3){
   likelihood <- new_likelihood
   
   weights_mat <- Marginalize(alpha,beta,pi_l)
   weights_vec <- as.vector(weights_mat)
   re_prob <- CalcProbRE(alpha,pi_l)
+  
+  ####UNDO THIS
   # weights_vec <- as.vector(mc)
   
   
   ##################
-  
   init <- CalcInit(alpha,beta,pi_l)
 
   gradhess <- CalcTran(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l)
   grad <- gradhess[[1]]
   hess <- gradhess[[2]]
-  params_tran <- params_tran - solve(hess,grad)
-  
-  
-  ##################
-  
 
+  if (fixed_effects == F){
+    null_inds <- grad != 0
+    params_tran[null_inds] <- params_tran[null_inds] - solve(hess[null_inds,null_inds],grad[null_inds])
+  } else {
+    params_tran <- params_tran - solve(hess,grad)
+  }
+  ##################
   act_vec <- as.vector(act)
   lod_act_weight <- as.numeric(act_vec==log(epsilon))
   act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(weights_vec[!is.na(as.vector(act))])
-
-  
   ##################
 
   act_cv_em.df <- act_cv.df %>% mutate(weights = (1-weights_vec))
@@ -834,20 +852,26 @@ while(abs(like_diff) > .0001 ){
   sum_weights.df <- act_cv_em.df %>% group_by(SEQN)%>% 
     summarise(sweights = sum(weights))
   
+  
+  #####mcclust
   act_mean <- as.matrix(weighted_mean.df %>% mutate(sweights = sum_weights.df[,2]))
 
-
+  
   act_clust <- me.weighted(data = act_mean[,2], modelName = "E",
-                   z = re_prob, weights = act_mean[,3])
+                           z = re_prob, weights = act_mean[,3],
+                           control = emControl(itmax = 1))
 
   pi_l <- act_clust$parameters$pro
 
-  mean_set <- act_clust$z %*% emit_act[1,1,]
+  mean_set <- act_clust$z %*% act_clust$parameters$mean
+  # mean_set <- act_clust$z %*% emit_act[1,1,]
+  clust_means <- act_clust$parameters$mean
   
+
   act_mean[,2] <- act_mean[,2] - mean_set
   
   act_cv.df <- act_cv.df %>% mutate(cmean = apply(as.matrix(mean_set),2,RepCovarInd))
-  act_cv_em.df <- act_cv_em.df %>% mutate(cmean = apply(as.matrix(mean_set),2,RepCovarInd)) 
+  act_cv_em.df <- act_cv_em.df %>% mutate(cmean = apply(as.matrix(mean_set),2,RepCovarInd))
   
   
   ##################
@@ -861,7 +885,7 @@ while(abs(like_diff) > .0001 ){
   
   ##################
 
-  emit_act[1,1,] <- act_clust$parameters$mean
+  emit_act[1,1,] <- clust_means
   # emit_act[1,1,] <- emit_act_true[1,1,]
 
   emit_act[1,2,] <- wake_act_sigma
@@ -880,10 +904,11 @@ while(abs(like_diff) > .0001 ){
   
   #Reorder to avoid label switching
   #Cluster means go from small to large
-  reord_inds <- order(emit_act[1,1,])
-  emit_act <- emit_act[,,reord_inds]
-  pi_l <- pi_l[reord_inds]
-  
+  if (length(pi_l)>1){
+    reord_inds <- order(emit_act[1,1,])
+    emit_act <- emit_act[,,reord_inds]
+    pi_l <- pi_l[reord_inds]
+  }
   ##################
   
 
@@ -905,7 +930,7 @@ decoded_mat <- sapply(c(1:num_of_people), ViterbiInd)
 if (!real_data){
   true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,pi_l_true_emp)
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
-  mc_list <- list(mc,decoded_mat,sum(decoded_mat == mc) / (num_of_people * day_length))
+  mc_list <- list(mc,decoded_mat,sum(decoded_mat == mc) / (num_of_people * day_length),clust_ind_true)
   params_to_save <- list(true_params,est_params,likelihood_vec,mc_list)
 } else {
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
@@ -914,16 +939,10 @@ if (!real_data){
   
   
 if(large_sim){
-  save(params_to_save,file = paste0("AHMM",sim_num,".rda"))
+  save(params_to_save,file = paste0("SIM",RE_type,RE_num,"S",sim_num,".rda"))
 }
+
 parallel::stopCluster(cl)
 unregister_dopar()
 
-
 #####################
-
-
-  
-
-
-
