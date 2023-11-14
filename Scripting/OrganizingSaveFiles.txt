@@ -1,0 +1,30 @@
+mkdir Norm Gamma Student
+mv norm*.rda Norm
+cd Norm
+mkdir c1 c2 c3 c4 c5 c6 
+mv norm1*.rda c1
+mv norm2*.rda c2
+mv norm3*.rda c3
+mv norm4*.rda c4
+mv norm5*.rda c5
+mv norm6*.rda c6
+cd ../
+mv gamma*.rda Gamma
+cd Gamma
+mkdir c1 c2 c3 c4 c5 c6 
+mv gamma1*.rda c1
+mv gamma2*.rda c2
+mv gamma3*.rda c3
+mv gamma4*.rda c4
+mv gamma5*.rda c5
+mv gamma6*.rda c6
+cd ../
+mv student*.rda Student
+cd Student
+mkdir c1 c2 c3 c4 c5 c6 
+mv student1*.rda c1
+mv student2*.rda c2
+mv student3*.rda c3
+mv student4*.rda c4
+mv student5*.rda c5
+mv student6*.rda c6

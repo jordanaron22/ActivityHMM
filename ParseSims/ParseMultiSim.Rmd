@@ -1,7 +1,7 @@
 ---
-title: "ParseSims GMM4 Random Start"
-output: pdf_document
-date: "2023-03-29"
+title: "ParseMultiSim"
+output: html_document
+date: "2023-11-07"
 ---
 
 ```{r setup, include=FALSE}
@@ -45,6 +45,9 @@ Params2Tran <- function(params_tran,time,index){
   return(tran)
 }
 
+
+tran_covar_num <- 3
+
 Tran2DF <- function(params_tran){
   race_list <- c("0","1","2","3","4","5") 
   
@@ -55,7 +58,7 @@ Tran2DF <- function(params_tran){
                         time = rep(c(1:96)/4,2),
                         race = race_list[1])
   
-  for (i in 2:6){
+  for (i in 2:tran_covar_num){
     tran_vec <- sapply(c(1:96),FUN = Params2Tran,params_tran = params_tran,index=i)
     tran_df_working <- data.frame(prob = c(tran_vec[3,],tran_vec[2,]),
                         type = rep(c("Sleep", "Wake"),each= 96),
@@ -69,9 +72,10 @@ Tran2DF <- function(params_tran){
 }
   
 
-ParseSingleSim <- function(folder, path){
-  setwd(path)
+ParseSingleClust <- function(folder, path_size ){
+  setwd(path_size)
   setwd(folder)
+  # setwd("C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Sims/Norm/Size1/c3")
 
   file_list <- list.files()
   load(file_list[1])
@@ -102,9 +106,9 @@ ParseSingleSim <- function(folder, path){
   
   flike <- c()
   like_array <- c()
-  tot_dec <- c()
+  neg_step <- c()
   
-  vit_perc <- matrix(0,1,length(file_list))
+  vit_array <- matrix(0,3,length(file_list))
   
   for (file_ind in 1:length(file_list)){
     load(file_list[file_ind])
@@ -133,11 +137,15 @@ ParseSingleSim <- function(folder, path){
     
     
     flike <- c(flike,params_to_save[[3]][length(params_to_save[[3]])])
-    like_array <- c(like_array,diff(params_to_save[[3]]))
-    tot_dec <- c(tot_dec, sum(diff(params_to_save[[3]][diff(params_to_save[[3]]) < 0])))
+    like_array <- diff(params_to_save[[3]])
+    neg_step <- c(neg_step,like_array[like_array < 0])
+    # print(neg_step)
+  
     
+    vit_array[1,file_ind] <- params_to_save[[4]][[3]]
+    vit_array[2,file_ind] <- params_to_save[[4]][[4]]
+    vit_array[3,file_ind] <- params_to_save[[4]][[5]]
     
-    vit_perc[,file_ind] <- params_to_save[[4]][[3]]
   }
   
   act_true_array[1,1,,] <- 0
@@ -157,175 +165,321 @@ ParseSingleSim <- function(folder, path){
   # x <- tran_df
   # tran_df <- rbind(x,tran_df_est)
   
+  init_cond <-  params_to_save[[5]]
+  # tran_resid <-  params_to_save[[6]]
   
   return(list(list(init_true_array,init_est_array),
               list(param_tran_true_array,param_tran_est_array),
               list(act_true_array,act_est_array),
               list(binom_true_array,binom_est_array),
               list(pil_true_array,pil_est_array),
-              list(flike,like_array,tot_dec,vit_perc),
-              list(tran_df),
-              list(num_re)))
+              list(flike,neg_step),
+              tran_df,
+              num_re,
+              vit_array,
+              init_cond))
   
   setwd("..")
 }
 
 
-path <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Sims"
 
-setwd(path)
-folder_list <- list.files()
-MultiSim <- list()
-for (folder_ind in 1:length(folder_list)){
-  SingleSim <- ParseSingleSim(folder_list[folder_ind],path)
-  MultiSim <- append(MultiSim,list(SingleSim))
+
+ParseSingleSim <- function(path_size){
+  setwd(path_size)
+  folder_list <- list.files()
+  SingleSim <- list()
+  for (folder_ind in 1:length(folder_list)){
+    SingleClust <- ParseSingleClust(folder_list[folder_ind],path_size)
+    SingleSim <- append(SingleSim,list(SingleClust))
+  }
+  return(SingleSim)
 }
 
-  
-```
 
-```{r, echo =FALSE}
-library(ggplot2)
-library(gridExtra)
+ParseSingleTypeMultiSize <- function(path_type){
+  setwd(path_type)
+  folder_list <- list.files()
+  SingleType_MultiSize <- list()
+  for(folder_ind in 1:length(folder_list)){
+    path_type_size <- paste0(path_type,"/",folder_list[folder_ind])
+    SingleSim <- ParseSingleSim(path_type_size)
+    SingleType_MultiSize <- append(SingleType_MultiSize,list(SingleSim))
+  }
+  return(SingleType_MultiSize)
+}
 
-AnalyzeResids <- function(true_array,est_array, index1, index2 = NA, title, index3 = NA,bline = T){
+ParseSims <- function(path){
+  setwd(path)
+  folder_list <- list.files()
+  MultiSim <- list()
+  for(folder_ind in 1:length(folder_list)){
+    path_type <- paste0(path,"/",folder_list[folder_ind])
+    SingleType_MultiSize <- ParseSingleTypeMultiSize(path_type)
+    MultiSim <- append(MultiSim,list(SingleType_MultiSize))
+  }
   
-  if (index1 >  dim(est_array)[1]){return(c())}
+  return(MultiSim)
+}
+
+path_size <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Sims/Norm/Size1"
+# SingleSim <- ParseSingleSim(path_size)  
+
+path_type <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Sims/Norm"
+# SingleType_MultiSize <- ParseSingleTypeMultiSize(path_type)
+
+
+
+path <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Sims"
+MultiSim <- ParseSims(path)
+
   
-  if(!is.na(index3)){
-    if(index3 > dim(est_array)[3]){
-      return(c())
+
+
+# SingleSim[[1]][[10]]
+# SingleType_MultiSize[[2]][[1]][[10]]
+# MultiSim[[2]][[2]][[1]][[10]]
+# 
+# 
+# SingleType_MultiSize[[1]][[1]][[2]][[2]][,,57]
+# 
+# SingleSim <- MultiSim[[2]][[2]]
+
+clust_num <- 6
+dist_num <- length(MultiSim)
+final_df <- data.frame()
+
+for (dist_ind in 1:dist_num){
+  size_num <- length(MultiSim[[dist_ind]])
+  for (size_ind in 1:size_num){
+    for (clust_ind in 1:clust_num){
+      nRE <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[8]]
+      vit_med <- apply(MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[9]],1,median)
+      nobs <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[3]][1]
+      lobs <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[3]][2]
+      dist <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[4]]
+      
+      working_df <- data.frame(estimates = vit_med,
+                             accType = c("Total","Wake","Sleep"),
+                             numberRE = nRE,
+                             numObs = nobs,
+                             lenObs = lobs,
+                             dist = dist)
+      final_df <- rbind(final_df,working_df)
     }
   }
   
-  if (is.na(index2)){
-    df <- data.frame(resid = est_array[index1,] - true_array[index1,])
-    true_mean <- mean(true_array[index1,])
-  } else if (is.na(index3)){
-    df <- data.frame(resid = est_array[index1,index2,] - true_array[index1,index2,])
-    true_mean <- true_array[index1,index2,]
-  } else {
-    if (index2 == 2){est_array[index1,index2,index3,] <- abs(est_array[index1,index2,index3,])}
-    df <- data.frame(resid = est_array[index1,index2,index3,] - true_array[index1,index2,index3,])
-    true_mean <- true_array[index1,index2,index3,]
-  }
-  
-    binwid <- (max(df) - min(df))/12
-    title <- paste("Residuals for",title)
-  
-  p <- ggplot(df, aes(x = resid)) + 
-    geom_histogram(colour="black", fill="white", binwidth = binwid)+
-    geom_vline(aes(xintercept=mean(resid)),
-              color="red", linetype="dashed", size=1) + 
-    xlab("Residuals") + 
-    ggtitle(title, subtitle = paste("True Mean of Parameter is ",round(true_mean,2))) + 
-    theme_gray()
-
-  if (bline) {
-    p + geom_vline(aes(xintercept=0),
-              color="blue", size=1)
-  } else{p}
-  
 }
 
-
-Boxplot1D <- function(Multisim,list_ind,vec_ind){
-
-  num_of_sims <- length(MultiSim)
-  final_df <- data.frame()
-  
-  for (sim_ind in 1:num_of_sims){
-    est <- MultiSim[[sim_ind]][[list_ind]][[2]][vec_ind,]
-    nRE <- MultiSim[[sim_ind]][[8]][[1]]
-    
-    working_df <- data.frame(estimates = est,
-                             numberRE = nRE)
-    final_df <- rbind(final_df,working_df)
-  }
-  
-  final_df$numberRE <- factor(final_df$numberRE,levels = c(sort(unique(final_df$numberRE))))
-  
-  est <- MultiSim[[1]][[list_ind]][[1]][vec_ind,]
-  nRE <- "Truth"
-  working_df <- data.frame(estimates = est,
-                           numberRE = nRE)
-  final_df <- rbind(final_df,working_df)
-  
-  
-  ggplot(final_df, aes(x=numberRE, y=estimates)) +
-    geom_boxplot() 
-}
+library(tidyr)
 
 
+library(looplot)
 
-Boxplot1D(MultiSim,1,2)
-Boxplot1D(MultiSim,1,1)
+vit_df <- final_df %>% pivot_wider(names_from = numberRE, values_from = estimates,names_prefix = "Cluster") 
 
+vit_df <- vit_df%>% mutate(xfiller = 1) 
 
-Boxplot1D(MultiSim,6,1)
-  
+colnames(vit_df)[1] <- "Wake/Sleep Accuracy"
+colnames(vit_df)[2] <- "Number of Participants"
+colnames(vit_df)[3] <- "Days of Follow-Up"
+colnames(vit_df)[4] <- "Distribution"
 
-```
-
-```{r, fig.width=10, fig.height = 7.5, echo =FALSE}
-
-grid.arrange(AnalyzeResids(SingleSim[[1]][[1]],SingleSim[[1]][[2]],1,title = "Initial Wake"),
-             AnalyzeResids(SingleSim[[1]][[1]],SingleSim[[1]][[2]],2,title = "Initial Sleep"),
-             nrow = 1)
-
-
-ggplot(SingleSim[[7]][[1]] %>% filter(type == "Sleep"), aes(x = time,y = prob,  color = etype)) + 
-  geom_line() + 
-  labs(title = "Probability of Falling Asleep by Hour", x = "Hour", y = "Probability of Falling Asleep")+
-  facet_wrap(vars(race))
-
-ggplot(SingleSim[[7]][[1]] %>% filter(type == "Wake"), aes(x = time,y = prob, color = etype)) + 
-  geom_line() + 
-  labs(title = "Probability of Waking by Hour 3 Discretes RE", x = "Hour", y = "Probability of Waking")+
-  facet_wrap(vars(race))
-
-grid.arrange(AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,1,"Wake Activity Mean Group 1",1,bline = F),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,1,"Wake Activity Mean Group 2",2,bline = F),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,1,"Wake Activity Mean Group 3",3,bline = F),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,1,"Wake Activity Mean Group 4",4,bline = F),
-             nrow = 2)
-
-grid.arrange(AnalyzeResids(SingleSim[[5]][[1]],SingleSim[[5]][[2]],1,title = "Pi1",bline = F),
-             AnalyzeResids(SingleSim[[5]][[1]],SingleSim[[5]][[2]],2,title = "Pi2",bline = F),
-             AnalyzeResids(SingleSim[[5]][[1]],SingleSim[[5]][[2]],3,title = "Pi3",bline = F),
-             AnalyzeResids(SingleSim[[5]][[1]],SingleSim[[5]][[2]],4,title = "Pi4",bline = F),
-             nrow = 2)
-
-
-grid.arrange(AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],2,1,"Sleep Activity Mean",1),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],2,2,"Sleep Activity SE",1),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,2,"Wake Activity SE",1),
-             AnalyzeResids(SingleSim[[4]][[1]],SingleSim[[4]][[2]],1,title = "Act LoD"),
-             nrow = 2)
-
-
-
-
-if (any(SingleSim[[6]][[3]] != 0)){
-  hist(SingleSim[[6]][[2]][SingleSim[[6]][[2]]<0], main = "Likelihood decrease step size")
-  hist(SingleSim[[6]][[3]], main = "Total likelihood decrease")
-}
-
-hist(SingleSim[[6]][[1]], main = "Final Likelihood")
-  
-
-hist(SingleSim[[6]][[4]], xlab = "Percent of Hidden States Predicted Correctly", 
-     main = "Percent of Hidden States Predicted Correctly")
-
-
-
+vit_df <- vit_df %>% mutate(Distribution = case_when(Distribution == "gamma" ~ "Gamma",
+                                                     Distribution == "norm" ~ "Normal",
+                                                     Distribution == "student" ~ "Student"))
 ```
 
 
+```{r,fig.height=9,fig.width=9}
+
+plot_data = nested_loop_base_data(
+    vit_df, 
+    x = "xfiller", steps = c("Days of Follow-Up","Number of Participants","Distribution"),
+    grid_cols = c("Wake/Sleep Accuracy"),
+    spu_x_shift = 2,
+    replace_labels = list("Days of Follow-Up" = c("96" = "1",
+                                        "672" = "7")
+                          ),
+)
+
+p = nested_loop_base_plot(
+    plot_data,
+    x_name = "", 
+    y_name = "% Correctly Predicted",
+    colors = viridis::viridis(8)[2:7],
+    legend_labels = c(1,2,3,4,5,6),
+    connect_spus = T
+)
+
+plot_data = nested_loop_paramsteps_data(
+    plot_data,
+    steps_y_base = -0.025, steps_y_height = .025, steps_y_shift = .05
+)
+
+p = nested_loop_paramsteps_plot(
+    p, plot_data, 
+    steps_values_annotate = TRUE, 
+    steps_annotation_size = 2.5
+)
+
+p = add_processing(
+    p, 
+    list(
+        # set limits
+        adjust_ylim = list(
+            y_expand_add = c(-0.05, NULL)
+        ),
+        # adjust theme
+        add_custom_theme = list(
+            axis.text.x=element_blank(), 
+            axis.ticks.x=element_blank(),
+            legend.position = "top", 
+            panel.grid.major = element_line(
+              color = "grey65", size = 0.1
+            )
+        ), 
+        # add horizontal lines
+        add_abline = list(
+            intercept = 0
+        )
+    )
+)
+
+p + labs(color='Number of Support Points',title = "Wake/Sleep/Total Accuracy by Model, Sample Size, and RE Distribution") + 
+  guides(size = F, shape = F, linetype = F)
+
+# ggsave("finalprojNL2.png",width = 9,height = 9)
+```
 
 ```{r}
-# labswap <- which(like_array < -4230000)
-# 
-# reset_est_array[,labswap]
-# pil_est_array[,labswap]
+clust_num <- 6
+dist_num <- length(MultiSim)
+final_df <- data.frame()
+
+Q25 <- function(x){return(quantile(x,probs = c(.25)))}
+Q75 <- function(x){return(quantile(x,probs = c(.75)))}
+
+for (dist_ind in 1:dist_num){
+  size_num <- length(MultiSim[[dist_ind]])
+  for (size_ind in 1:size_num){
+    for (clust_ind in 1:clust_num){
+      nRE <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[8]]
+      nobs <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[3]][1]
+      lobs <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[3]][2]
+      dist <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[4]]
+      
+      
+      tran_df_working <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[7]] %>% 
+        pivot_wider(names_from = etype, values_from = prob,names_prefix = "Cluster")
+      colnames(tran_df_working)[4:5] <- c("est","true")
+      
+      tran_df_working <- tran_df_working %>% 
+        mutate(resid = est - true) %>% 
+        group_by(type,race) %>% 
+        # summarise(across(resid,list(Q25 = Q25)))
+        summarise(across(resid,list(med = median)))
+        # summarise(across(resid,list(Q75 = Q75)))
+        # summarise(median = median(resid))
+      
+      colnames(tran_df_working)[3] <- "quantile"
+      
+      working_df <- data.frame(estimates = tran_df_working$quantile,
+                             Transition = tran_df_working$type,
+                             Covariate = tran_df_working$race,
+                             numberRE = nRE,
+                             numObs = nobs,
+                             lenObs = lobs,
+                             dist = dist)
+      final_df <- rbind(final_df,working_df)
+    }
+  }
+  
+}
+
+
+
+tran_resid_df <- final_df %>% pivot_wider(names_from = numberRE, values_from = estimates,names_prefix = "Cluster") 
+
+tran_resid_df <- tran_resid_df%>% mutate(xfiller = 1) 
+
+
+colnames(tran_resid_df)[1] <- "Transition"
+colnames(tran_resid_df)[2] <- "Covariate"
+colnames(tran_resid_df)[3] <- "Number of Participants"
+colnames(tran_resid_df)[4] <- "Days of Follow-Up"
+colnames(tran_resid_df)[5] <- "Distribution"
+
+tran_resid_df <- tran_resid_df %>% mutate(Distribution = case_when(Distribution == "gamma" ~ "Gamma",
+                                                                 Distribution == "norm" ~ "Normal",
+                                                                 Distribution == "student" ~ "Student"))
+
+tran_resid_df <- tran_resid_df %>% mutate(Transition = case_when(Transition == "Sleep" ~ "Wake to Sleep",
+                                                                 Transition == "Wake" ~ "Sleep to Wake"))
+
+
+```
+
+```{r,fig.height=9,fig.width=9}
+
+# tran_resid_df[,-c(1,2)]
+
+plot_data = nested_loop_base_data(
+    tran_resid_df, 
+    x = "xfiller", steps = c("Days of Follow-Up","Number of Participants","Distribution"),
+    grid_cols = c("Transition"),
+    grid_rows = c("Covariate"),
+    spu_x_shift = 2,
+    replace_labels = list("Days of Follow-Up" = c("96" = "1",
+                                        "672" = "7")
+                          ),
+)
+
+p = nested_loop_base_plot(
+    plot_data,
+    x_name = "", 
+    y_name = "% Correctly Predicted",
+    colors = viridis::viridis(8)[2:7],
+    legend_labels = c(1,2,3,4,5,6),
+    connect_spus = T
+)
+
+plot_data = nested_loop_paramsteps_data(
+    plot_data,
+    steps_y_base = -0.2, steps_y_height = .025, steps_y_shift = .05
+)
+
+p = nested_loop_paramsteps_plot(
+    p, plot_data, 
+    steps_values_annotate = TRUE, 
+    steps_annotation_size = 2.5
+)
+
+p = add_processing(
+    p, 
+    list(
+        # set limits
+        adjust_ylim = list(
+            y_expand_add = c(NULL, NULL)
+        ),
+        # adjust theme
+        add_custom_theme = list(
+            axis.text.x=element_blank(), 
+            axis.ticks.x=element_blank(),
+            legend.position = "top", 
+            panel.grid.major = element_line(
+              color = "grey65", size = 0.1
+            )
+        ), 
+        # add horizontal lines
+        add_abline = list(
+            intercept = 0
+        )
+    )
+)
+
+p + labs(color='Number of Support Points',title = "Transition Residuals by Model, Sample Size, and RE Distribution") + 
+  guides(size = F, shape = F, linetype = F)
+
+# ggsave("finalprojNL3.png",width = 8,height = 8)
 ```

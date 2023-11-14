@@ -1,17 +1,27 @@
-large_sim <- T
 set_seed <- T
-# sim_num <- 12345
+# sim_num <- 101
 sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
 
 real_data <- F
-epsilon <- 1e-5
+# epsilon <- 1e-5
+epsilon <- 1e-100
 
-fixed_effects <- T
+sim_covar <- T
 
-RE_type <- "norm"
-RE_par1 <- 0
-RE_par2 <- 2
-RE_num <- 4
+wake_params <- c(2,3)
+sleep_params <- c(0,2)
+
+
+
+RE_num <- as.numeric(commandArgs(TRUE)[1])
+sim_size <- as.numeric(commandArgs(TRUE)[2])
+RE_type <- as.character(commandArgs(TRUE)[3])
+print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",RE_num))
+
+
+if(is.na(RE_num)){RE_num <- 1}
+if(is.na(sim_size)){sim_size <- 1}
+if(is.na(RE_type)){RE_type <- "norm"}
 
 
 #### Functions ####
@@ -19,12 +29,14 @@ RE_num <- 4
 SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
                         act_light_binom,pi_l,re_set){
   
-  if(RE_type == "disc"){re_vec <- sample(re_set,num_of_people,T,pi_l)}
-  if(RE_type == "norm"){re_vec <- rnorm(num_of_people,RE_par1,RE_par2)}
-  if(RE_type == "unif"){re_vec <- runif(num_of_people,RE_par1,RE_par2)}
+  if(RE_type == "norm"){re_vec <- rnorm(num_of_people,0,2)}
+  if(RE_type == "student"){re_vec <- rt(num_of_people,2)}
+  if(RE_type == "gamma"){re_vec <- rgamma(num_of_people,2,1)-2}
   
-  covar_mat_tran <- t(rmultinom(num_of_people,1,rep(1/6,6)))
-  covar_mat_tran <- cbind((numeric(num_of_people) + 1),covar_mat_tran[,2:6])
+  tran_covar_num <- 3
+  
+  covar_mat_tran <- t(rmultinom(num_of_people,1,rep(1/tran_covar_num,tran_covar_num)))
+  covar_mat_tran <- cbind((numeric(num_of_people) + 1),covar_mat_tran[,2:tran_covar_num])
   
   for (ind in 1:num_of_people){
     hidden_states <- numeric(day_length)
@@ -269,6 +281,9 @@ CalcLikelihood <- function(alpha,pi_l){
 }
 
 CalcEmpiricTran <- function(mc,covar_mat_tran){
+  
+  tran_covar_num <- 3
+  
   tran <- matrix(0,2,2)
   trans <- list(tran,tran,tran,tran,tran,tran)
   for (ind in 1:dim(mc)[2]){
@@ -277,7 +292,7 @@ CalcEmpiricTran <- function(mc,covar_mat_tran){
       trans[[tran_ind]][mc[tim-1,ind]+1,mc[tim,ind]+1] <- trans[[tran_ind]][mc[tim-1,ind]+1,mc[tim,ind]+1]+1
     }
   }
-  for (i in 1:6){
+  for (i in 1:tran_covar_num){
     trans[[i]] <- trans[[i]]/rowSums(trans[[i]])
   }
   return(trans)
@@ -555,13 +570,13 @@ ClassSum <- function(time,current_state,act,emit_act,act_light_binom,ind){
   
   
   working_class_sum <- logSumExp(c(working_class))
-  if (current_state == 1 ){
-    working_class_sum <- working_class_sum+log(1-act_light_binom)
-    
-    if(act[time,ind] == log(epsilon)){
-      working_class_sum <- logSumExp(c(working_class_sum,log(act_light_binom)))
-    }
-  }
+  # if (current_state == 1 ){
+  #   working_class_sum <- working_class_sum+log(1-act_light_binom)
+  #   
+  #   if(act[time,ind] == log(epsilon)){
+  #     working_class_sum <- logSumExp(c(working_class_sum,log(act_light_binom)))
+  #   }
+  # }
   return(working_class_sum)
 }
 
@@ -571,6 +586,9 @@ ViterbiInd <- function(ind){
   viterbi_mat <- matrix(NA,2,day_length)
   viterbi_mat[1,1] <- log(init[1]) + ClassSum(1,0,act,emit_act,act_light_binom,ind)
   viterbi_mat[2,1] <- log(init[2]) + ClassSum(1,1,act,emit_act,act_light_binom,ind)
+  
+  
+  viterbi_ind_mat <- matrix(NA,2,day_length)
   
   
   for (time in 2:day_length){
@@ -586,11 +604,53 @@ ViterbiInd <- function(ind){
     viterbi_mat[2,time] <- ClassSum(time,1,act,emit_act,act_light_binom,ind) + 
       max(viterbi_mat[1,time-1] + log(tran[1,2]),
           viterbi_mat[2,time-1] + log(tran[2,2]))
+    
+    
+    viterbi_ind_mat[1,time] <-  which.max(c(viterbi_mat[1,time-1] + log(tran[1,1]),
+                                            viterbi_mat[2,time-1] + log(tran[2,1])))
+    
+    
+    viterbi_ind_mat[2,time] <- which.max(c(viterbi_mat[1,time-1] + log(tran[1,2]),
+                                           viterbi_mat[2,time-1] + log(tran[2,2])))
+    
+    
   }
   
-  decoded_mc <- apply(viterbi_mat,2,which.max) - 1
-  return(decoded_mc)
+  decoded_mc <- c(which.max(viterbi_mat[,time]))
+  for(time in day_length:2){
+    decoded_mc <- c(viterbi_ind_mat[decoded_mc[1],time],decoded_mc)
+  }
+  
+  return(decoded_mc-1)
+} 
+
+if(sim_covar){tran_covar_num <- 3}
+if(!sim_covar){tran_covar_num <- 6}
+
+
+Tran2DF <- function(params_tran){
+  race_list <- c("0","1","2","3","4","5") 
+  
+  
+  tran_vec <- sapply(c(1:96),FUN = Params2Tran,params_tran = params_tran,index=1)
+  tran_df <- data.frame(prob = c(tran_vec[3,],tran_vec[2,]),
+                        type = rep(c("Sleep", "Wake"),each= 96),
+                        time = rep(c(1:96)/4,2),
+                        race = race_list[1])
+  
+  for (i in 2:tran_covar_num){
+    tran_vec <- sapply(c(1:96),FUN = Params2Tran,params_tran = params_tran,index=i)
+    tran_df_working <- data.frame(prob = c(tran_vec[3,],tran_vec[2,]),
+                                  type = rep(c("Sleep", "Wake"),each= 96),
+                                  time = rep(c(1:96)/4,2),
+                                  race = race_list[i])
+    
+    tran_df <- rbind(tran_df,tran_df_working)
+  }
+  
+  return(tran_df)
 }
+
 #### User Settings Start Here ####
 
 library(matrixStats)
@@ -609,33 +669,49 @@ library(mclust)
 # library(emdbook)
 
 
-
 #### Set True Parameters ####
-central_mean <- 6
+central_mean <- wake_params[1]
 
-# re_set <- c(0)
-# re_set <- c(-1.5,1.5)
-# re_set <- c(-1,0,1)
-re_set <- c(-3,-1,1,3)
+if (RE_type == "disc"){
+  re_set <- seq(from=-2, to=2, length.out=RE_num)
+}
+
+if (RE_type == "norm" | RE_type == "student"){
+  var_factor <- RE_num %/% 2
+  re_set <- seq(-2*var_factor,2*var_factor,length.out = RE_num) * .75
+}
+
+if (RE_type == "gamma"){
+  re_set <- seq(-RE_num+1,0,length.out = RE_num)
+}
+
+if (RE_num == 1){
+  re_set <- c(0)
+}
+
+pi_l_true <- rep(1/RE_num,RE_num)
 
 mean_set_true <- central_mean + re_set
 
-# pi_l_true <- c(1)
-# pi_l_true <- c(.5,.5)
-# pi_l_true <- c(1/3,1/3,1/3)
-pi_l_true <- c(.15,.35,.35,.15)
 
 init_true <- c(.3,.7)
 
+if (!sim_covar){
+  params_tran_true <- c(-3,.5,1,-1,-1,1,.9,-.8,
+                        -2.2,.3,.6,.6,-.6,-.6,-.75,.8)
+} else{
+  params_tran_true <- c(-3,.5,1,0,0,0,.9,-.8,
+                        -2.2,.3,.6,0,0,0,-.75,.8)
+}
 
-params_tran_true <- c(-3,.5,1,-1,-1,1,.9,-.8,
-                      -2.2,.3,.6,.6,-.6,-.6,-.75,.8)
+  
+
 
 emit_act_true <- array(dim = c(2,2,length(mean_set_true)))
 emit_act_true[1,1,] <- mean_set_true
-emit_act_true[1,2,] <- 3
-emit_act_true[2,1,] <- 0
-emit_act_true[2,2,] <- 2
+emit_act_true[1,2,] <- wake_params[2]
+emit_act_true[2,1,] <- sleep_params[1]
+emit_act_true[2,2,] <- sleep_params[2]
 
 
 colnames(emit_act_true) <- c("Mean","Std Dev")
@@ -645,20 +721,30 @@ emit_act_true_sim <- emit_act_true[,,1]
 emit_act_true_sim[1,1] <- central_mean
 
 #Prob of being below detection limit
-act_light_binom_true <- c(.05)
+# act_light_binom_true <- c(.05)
+act_light_binom_true <- c(0)
 
 #### Simulate True Data ####
 
 if (!real_data){
-  if (is.na(sim_num)){sim_num <- 1}
+  if (is.na(sim_num)){sim_num <- 101}
   if (set_seed){set.seed(sim_num)}
   
-  if (large_sim){
-    day_length <- 96 * 3
-    num_of_people <- 2000
-  } else {
+  if (sim_size == 0){
     day_length <- 96  
-    num_of_people <- 250
+    num_of_people <- 300
+  } else if (sim_size == 1){
+    day_length <- 96 
+    num_of_people <- 1000
+  } else if (sim_size == 2){
+    day_length <- 96  
+    num_of_people <- 1000 * 5
+  } else if (sim_size == 3){
+    day_length <- 96 * 7  
+    num_of_people <- 1000
+  } else if (sim_size == 4){
+    day_length <- 96 * 7  
+    num_of_people <- 1000 * 5
   }
   
   
@@ -697,8 +783,8 @@ init[2] <- 1 - init[1]
 
 
 params_tran <- params_tran_true + runif(16,-.3,.3)
-if (!fixed_effects){
-  params_tran[c(2:6,10:14)] <- 0
+if (!sim_covar){
+  params_tran[c(4:6,12:14)] <- 0
 }
 
 emit_act <- emit_act_true
@@ -751,6 +837,7 @@ if(real_data){
 
 #### EM #### 
 
+
 # init <- init_true_emp
 # params_tran <- params_tran_true
 # emit_act <- emit_act_true_emp
@@ -763,27 +850,29 @@ emit_act <- emit_act_true
 act_light_binom <- act_light_binom_true
 pi_l <- pi_l_true
 
+time_vec <- c()
+
 
 id_mat <- apply(as.matrix(id$SEQN),2,RepCovarInd)
 
 act_cv.df <- data.frame(activity = as.vector(act),
                         SEQN = id_mat)
 
-if(fixed_effects == F){
-  covar_mat_tran[,2:dim(covar_mat_tran)[2]] <- 0
-}
 
 
 
 print("PRE PAR")
 
 if ((parallel::detectCores() - 1) > 8){
-  n.cores <- 120
+  n.cores <- 8
 } else {
-  n.cores <- 7
+  n.cores <- 4
 }
 
-cl <- makeCluster(n.cores)
+print(paste0("RE num:",RE_num,"N cores detected:",parallel::detectCores()))
+
+# cl <- makeCluster(n.cores)
+cl <- parallel::makeCluster(n.cores, setup_strategy = "sequential")
 
 print("PRE REG")
 
@@ -794,8 +883,10 @@ print("POST REG")
 clusterExport(cl,c('ForwardInd','BackwardInd','logClassification','logSumExp','dnorm','ChooseTran', 'epsilon',
                    'Params2Tran','Param2TranHelper','expit','SumOverREIndTime'))
 
-foreach::getDoParRegistered()
-foreach::getDoParWorkers()
+print(paste0("RE num:",RE_num,"Par registered:",foreach::getDoParRegistered()))
+print(paste0("RE num:",RE_num,"Par workers:",foreach::getDoParWorkers()))
+
+
 
 
 print("PRE ALPHA")
@@ -814,6 +905,7 @@ like_diff <- new_likelihood - likelihood
 
 
 while(abs(like_diff) > 1e-3){
+  start_time <- Sys.time()
   likelihood <- new_likelihood
   
   weights_mat <- Marginalize(alpha,beta,pi_l)
@@ -831,7 +923,7 @@ while(abs(like_diff) > 1e-3){
   grad <- gradhess[[1]]
   hess <- gradhess[[2]]
 
-  if (fixed_effects == F){
+  if (sim_covar == T){
     null_inds <- grad != 0
     params_tran[null_inds] <- params_tran[null_inds] - solve(hess[null_inds,null_inds],grad[null_inds])
   } else {
@@ -840,7 +932,7 @@ while(abs(like_diff) > 1e-3){
   ##################
   act_vec <- as.vector(act)
   lod_act_weight <- as.numeric(act_vec==log(epsilon))
-  act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(weights_vec[!is.na(as.vector(act))])
+  # act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(weights_vec[!is.na(as.vector(act))])
   ##################
 
   act_cv_em.df <- act_cv.df %>% mutate(weights = (1-weights_vec))
@@ -918,31 +1010,80 @@ while(abs(like_diff) > 1e-3){
   
   new_likelihood <- CalcLikelihood(alpha,pi_l)
   like_diff <- new_likelihood - likelihood
-  print(like_diff)
+  print(paste("RE num:",RE_num,"Like:",round(like_diff,6)))
   likelihood_vec <- c(likelihood_vec,new_likelihood)
+
+  end_time <- Sys.time()
+  time_vec <- c(time_vec,as.numeric(end_time - start_time))
+  # print(paste("RE num",RE_num, "memory",sum(gc(T)[,6])))
   
+  # break
 }
+
+
+print(paste("Sim Num:",sim_num,"RE Num:",RE_num,"Ending"))
 
 
 decoded_mat <- sapply(c(1:num_of_people), ViterbiInd)
 
 
+total_acc <- (sum(decoded_mat == 0 & mc ==0) + sum(decoded_mat == 1 & mc ==1))/(num_of_people*day_length)
+wake_acc <- sum(decoded_mat == 0 & mc ==0)/(sum(decoded_mat == 0 & mc ==0) + sum(decoded_mat == 1 & mc ==0))
+sleep_acc <- sum(decoded_mat == 1 & mc ==1)/(sum(decoded_mat == 1 & mc ==1) + sum(decoded_mat == 0 & mc ==1))
+
+
+starting_conditions <- list(wake_params,
+                           sleep_params,
+                           c(num_of_people,day_length),
+                           RE_type,
+                           RE_num,
+                           sim_num,
+                           time_vec)
+
+tran_df <- Tran2DF(params_tran) %>% 
+  mutate(truth = Tran2DF(params_tran_true)[,1]) %>% 
+  mutate(resid = prob - truth)
+
+Q1 <- function(x){return(quantile(x,probs = c(.01)))}
+Q10 <- function(x){return(quantile(x,probs = c(.1)))}
+Q25 <- function(x){return(quantile(x,probs = c(.25)))}
+
+
+Q75 <- function(x){return(quantile(x,probs = c(.75)))}
+Q90 <- function(x){return(quantile(x,probs = c(.9)))}
+Q99 <- function(x){return(quantile(x,probs = c(.99)))}
+
+tran_sum_df <- tran_df %>% group_by(type,race) %>% summarise(across(resid, 
+                                                                    list(min = min, Q1 = Q1, Q10 = Q10, Q25 = Q25, med = median,
+                                                                         Q75 = Q75, Q90 = Q90, Q99 = Q99, max = max)))
+
+tran_list <- list(tran_df,tran_sum_df)
+
 if (!real_data){
-  true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,pi_l_true_emp)
+  true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,pi_l_true_emp,clust_ind_true)
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
-  mc_list <- list(mc,decoded_mat,sum(decoded_mat == mc) / (num_of_people * day_length),clust_ind_true)
-  params_to_save <- list(true_params,est_params,likelihood_vec,mc_list)
+  mc_list <- list(mc,decoded_mat,total_acc,wake_acc,sleep_acc)
+  params_to_save <- list(true_params,est_params,likelihood_vec,mc_list,starting_conditions,tran_list)
 } else {
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
-  params_to_save <- list(est_params,likelihood_vec,decoded_mat)
+  params_to_save <- list(est_params,likelihood_vec,decoded_mat,starting_conditions)
 }
   
   
-if(large_sim){
-  save(params_to_save,file = paste0("SIM",RE_type,RE_num,"S",sim_num,".rda"))
+if(sim_size != 0){
+  save(params_to_save,file = paste0(RE_type,RE_num,"Size",sim_size,"Seed",sim_num,".rda"))
 }
 
-parallel::stopCluster(cl)
-unregister_dopar()
+
+# parallel::stopCluster(cl)
+# unregister_dopar()
 
 #####################
+
+
+# Error in serverSocket(port = port) : 
+#   creation of server socket failed: port 11475 cannot be opened
+# Calls: makeCluster -> makePSOCKcluster -> serverSocket
+# Execution halted
+
+

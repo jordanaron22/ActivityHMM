@@ -45,6 +45,9 @@ Params2Tran <- function(params_tran,time,index){
   return(tran)
 }
 
+
+tran_covar_num <- 3
+
 Tran2DF <- function(params_tran){
   race_list <- c("0","1","2","3","4","5") 
   
@@ -55,7 +58,7 @@ Tran2DF <- function(params_tran){
                         time = rep(c(1:96)/4,2),
                         race = race_list[1])
   
-  for (i in 2:6){
+  for (i in 2:tran_covar_num){
     tran_vec <- sapply(c(1:96),FUN = Params2Tran,params_tran = params_tran,index=i)
     tran_df_working <- data.frame(prob = c(tran_vec[3,],tran_vec[2,]),
                         type = rep(c("Sleep", "Wake"),each= 96),
@@ -69,9 +72,9 @@ Tran2DF <- function(params_tran){
 }
   
 
-ParseSingleSim <- function(folder){
+ParseSingleClust <- function(folder, path){
+  setwd(path)
   setwd(folder)
-
 
   file_list <- list.files()
   load(file_list[1])
@@ -102,9 +105,9 @@ ParseSingleSim <- function(folder){
   
   flike <- c()
   like_array <- c()
-  tot_dec <- c()
+  neg_step <- c()
   
-  vit_perc <- matrix(0,1,length(file_list))
+  vit_array <- matrix(0,3,length(file_list))
   
   for (file_ind in 1:length(file_list)){
     load(file_list[file_ind])
@@ -133,11 +136,15 @@ ParseSingleSim <- function(folder){
     
     
     flike <- c(flike,params_to_save[[3]][length(params_to_save[[3]])])
-    like_array <- c(like_array,diff(params_to_save[[3]]))
-    tot_dec <- c(tot_dec, sum(diff(params_to_save[[3]][diff(params_to_save[[3]]) < 0])))
+    like_array <- diff(params_to_save[[3]])
+    neg_step <- c(neg_step,like_array[like_array < 0])
+    # print(neg_step)
+  
     
+    vit_array[1,file_ind] <- params_to_save[[4]][[3]]
+    vit_array[2,file_ind] <- params_to_save[[4]][[4]]
+    vit_array[3,file_ind] <- params_to_save[[4]][[5]]
     
-    vit_perc[,file_ind] <- params_to_save[[4]][[3]]
   }
   
   act_true_array[1,1,,] <- 0
@@ -157,128 +164,333 @@ ParseSingleSim <- function(folder){
   # x <- tran_df
   # tran_df <- rbind(x,tran_df_est)
   
+  init_cond <-  params_to_save[[5]]
   
   return(list(list(init_true_array,init_est_array),
               list(param_tran_true_array,param_tran_est_array),
               list(act_true_array,act_est_array),
               list(binom_true_array,binom_est_array),
               list(pil_true_array,pil_est_array),
-              list(flike,like_array,tot_dec,vit_perc),
-              list(tran_df)))
+              list(flike,neg_step),
+              tran_df,
+              num_re,
+              vit_array,
+              init_cond))
+  
+  setwd("..")
 }
 
-setwd("Sims//")
 
-folder_list <- list.files()
 
-SingleSim <- ParseSingleSim(folder_list[2])
+
+ParseSingleSim <- function(path){
+  setwd(path)
+  folder_list <- list.files()
+  SingleSim <- list()
+  for (folder_ind in 1:length(folder_list)){
+    SingleClust <- ParseSingleClust(folder_list[folder_ind],path)
+    SingleSim <- append(SingleSim,list(SingleClust))
+  }
+  return(SingleSim)
+}
+
+
+path_size <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Sims/Norm/Size1"
+SingleSim <- ParseSingleSim(path_size)  
+
+
 ```
 
 ```{r, echo =FALSE}
 library(ggplot2)
 library(gridExtra)
 
-AnalyzeResids <- function(true_array,est_array, index1, index2 = NA, title, index3 = NA,bline = T){
+
+
+SimBoxplot <- function(SingleSim,list_ind,est_ind,vec_ind1, inc_true,title,vec_ind2 = NA){
+
+  num_of_sims <- length(SingleSim)
+  final_df <- data.frame()
   
-  if (index1 >  dim(est_array)[1]){return(c())}
-  
-  if(!is.na(index3)){
-    if(index3 > dim(est_array)[3]){
-      return(c())
+  for (sim_ind in 1:num_of_sims){
+    if(vec_ind1 == 0){
+      est <- SingleSim[[sim_ind]][[list_ind]][[est_ind]]
+    } else if (is.na(vec_ind2)){
+      est <- SingleSim[[sim_ind]][[list_ind]][[est_ind]][vec_ind1,]
+    } else {
+      est <- SingleSim[[sim_ind]][[list_ind]][[est_ind]][vec_ind1,vec_ind2,1,]
+    } 
+      
+    if (length(est) > 0){
+      nRE <- SingleSim[[sim_ind]][[8]]
+      
+      working_df <- data.frame(estimates = est,
+                               numberRE = nRE)
+      final_df <- rbind(final_df,working_df)
     }
   }
   
-  if (is.na(index2)){
-    df <- data.frame(resid = est_array[index1,] - true_array[index1,])
-    true_mean <- mean(true_array[index1,])
-  } else if (is.na(index3)){
-    df <- data.frame(resid = est_array[index1,index2,] - true_array[index1,index2,])
-    true_mean <- true_array[index1,index2,]
-  } else {
-    if (index2 == 2){est_array[index1,index2,index3,] <- abs(est_array[index1,index2,index3,])}
-    df <- data.frame(resid = est_array[index1,index2,index3,] - true_array[index1,index2,index3,])
-    true_mean <- true_array[index1,index2,index3,]
+  final_df$numberRE <- factor(final_df$numberRE,levels = c(sort(unique(final_df$numberRE))))
+  
+  
+  if (inc_true){
+    if (is.na(vec_ind2)){
+      est <- SingleSim[[1]][[list_ind]][[1]][vec_ind1,]
+    } else{
+      est <- SingleSim[[1]][[list_ind]][[1]][vec_ind1,vec_ind2,1,]
+    }
+      
+    nRE <- "Truth"
+    working_df <- data.frame(estimates = est,
+                             numberRE = nRE)
+    final_df <- rbind(final_df,working_df)
+  }
+    
+  
+  
+  ggplot(final_df, aes(x=numberRE, y=estimates)) +
+    geom_boxplot() +
+    ggtitle(title)+coord_cartesian(ylim = quantile(final_df$estimates, c(0.025, 0.975)))
+}
+
+TranPlot <- function(df,wake_sleep, diff = F){
+  if(wake_sleep == "Sleep"){
+    title <- "Probability of Falling Asleep by Hour"
+  } else if (wake_sleep == "Wake"){
+    title <- "Probability of Waking by Hour"
   }
   
-    binwid <- (max(df) - min(df))/12
-    title <- paste("Residuals for",title)
+  if (diff){title <- paste("Residuals for",title)}
   
-  p <- ggplot(df, aes(x = resid)) + 
-    geom_histogram(colour="black", fill="white", binwidth = binwid)+
-    geom_vline(aes(xintercept=mean(resid)),
-              color="red", linetype="dashed", size=1) + 
-    xlab("Residuals") + 
-    ggtitle(title, subtitle = paste("True Mean of Parameter is ",round(true_mean,2))) + 
-    theme_gray()
-
-  if (bline) {
-    p + geom_vline(aes(xintercept=0),
-              color="blue", size=1)
-  } else{p}
   
+  p <- ggplot(df %>% filter(type == wake_sleep), aes(x = time,y = prob,  color = etype)) + 
+    geom_line() + 
+    labs(title = title, x = "Hour", y = "Probability of Falling Asleep")+
+    facet_grid(rows = vars(race))
+  
+  if (diff){p <- p + geom_hline(yintercept=0, linetype="dashed")}
+  
+  return(p)
 }
 
-```
-
-```{r, fig.width=10, fig.height = 7.5, echo =FALSE}
-
-grid.arrange(AnalyzeResids(SingleSim[[1]][[1]],SingleSim[[1]][[2]],1,title = "Initial Wake"),
-             AnalyzeResids(SingleSim[[1]][[1]],SingleSim[[1]][[2]],2,title = "Initial Sleep"),
-             nrow = 1)
-
-
-ggplot(SingleSim[[7]][[1]] %>% filter(type == "Sleep"), aes(x = time,y = prob,  color = etype)) + 
-  geom_line() + 
-  labs(title = "Probability of Falling Asleep by Hour", x = "Hour", y = "Probability of Falling Asleep")+
-  facet_wrap(vars(race))
-
-ggplot(SingleSim[[7]][[1]] %>% filter(type == "Wake"), aes(x = time,y = prob, color = etype)) + 
-  geom_line() + 
-  labs(title = "Probability of Waking by Hour 3 Discretes RE", x = "Hour", y = "Probability of Waking")+
-  facet_wrap(vars(race))
-
-grid.arrange(AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,1,"Wake Activity Mean Group 1",1,bline = F),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,1,"Wake Activity Mean Group 2",2,bline = F),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,1,"Wake Activity Mean Group 3",3,bline = F),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,1,"Wake Activity Mean Group 4",4,bline = F),
-             nrow = 2)
-
-grid.arrange(AnalyzeResids(SingleSim[[5]][[1]],SingleSim[[5]][[2]],1,title = "Pi1",bline = F),
-             AnalyzeResids(SingleSim[[5]][[1]],SingleSim[[5]][[2]],2,title = "Pi2",bline = F),
-             AnalyzeResids(SingleSim[[5]][[1]],SingleSim[[5]][[2]],3,title = "Pi3",bline = F),
-             AnalyzeResids(SingleSim[[5]][[1]],SingleSim[[5]][[2]],4,title = "Pi4",bline = F),
-             nrow = 2)
-
-
-grid.arrange(AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],2,1,"Sleep Activity Mean",1),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],2,2,"Sleep Activity SE",1),
-             AnalyzeResids(SingleSim[[3]][[1]],SingleSim[[3]][[2]],1,2,"Wake Activity SE",1),
-             AnalyzeResids(SingleSim[[4]][[1]],SingleSim[[4]][[2]],1,title = "Act LoD"),
-             nrow = 2)
-
-
-
-
-if (any(SingleSim[[6]][[3]] != 0)){
-  hist(SingleSim[[6]][[2]][SingleSim[[6]][[2]]<0], main = "Likelihood decrease step size")
-  hist(SingleSim[[6]][[3]], main = "Total likelihood decrease")
+PlotTran <- function(SingleSim){
+  num_of_sims <- length(SingleSim)
+  final_df <- data.frame()
+  
+  for (sim_ind in 1:num_of_sims){
+    final_df <- rbind(final_df,SingleSim[[sim_ind]][[7]])
+  }
+  
+  p1 <- TranPlot(final_df,"Sleep")
+  p2 <- TranPlot(final_df,"Wake")
+  
+  diff_df <- final_df %>% filter(etype != "true")
+  diff_df <- diff_df %>% mutate(prob = final_df[final_df$etype!="true",1] - final_df[final_df$etype=="true",1])
+  
+  p3 <- TranPlot(diff_df,"Sleep",diff = T)
+  p4 <- TranPlot(diff_df,"Wake",diff = T)
+  
+  return(list(p1,p2,p3,p4))
 }
 
-hist(SingleSim[[6]][[1]], main = "Final Likelihood")
+
+
+BoxplotClust <- function(list_ind,inc_out = T){
+  final_df <- data.frame()
+  num_of_sims <- length(SingleSim)
   
+  if (list_ind == 3){
+    ylabel <- "Cluster Mean"
+    xlabel <- ""
+    title <- "Cluster Mean and Mixing Proportion by # RE"
+  }
+  if (list_ind == 5){
+    ylabel <- "Mixing Proportion"
+    xlabel <- "Cluster Index"
+    title <- ""
+    }
+  
+  for (sim_ind in 1:num_of_sims){
+      nRE <- SingleSim[[sim_ind]][[8]]
+      
+      if (length(dim(SingleSim[[sim_ind]][[list_ind]][[2]])) == 4){
+        working_ms <- SingleSim[[sim_ind]][[list_ind]][[2]][1,1,,]
+      } else {
+        working_ms <- SingleSim[[sim_ind]][[list_ind]][[2]]
+      }
+        
+    
+      
+      if (!is.null(dim(working_ms)[1])){
+        for (clust_ind in 1:dim(working_ms)[1]){
+          working_df <- data.frame(estimates = working_ms[clust_ind,],
+                                   numberRE = nRE,
+                                   clust_ind = clust_ind)
+          
+          final_df <- rbind(final_df,working_df)
+        }
+        
+      } else {
+        working_df <- data.frame(estimates = SingleSim[[sim_ind]][[list_ind]][[2]][1,1,1,],
+                                 numberRE = nRE,
+                                 clust_ind = 1)
+        
+        final_df <- rbind(final_df,working_df)
+    }
+  }
+    
+  final_df$numberRE <- factor(final_df$numberRE,levels = c(sort(unique(final_df$numberRE))))
+  final_df$clust_ind <- factor(final_df$clust_ind,levels = c(sort(unique(final_df$clust_ind))))
+  
+  
+  p <- ggplot(final_df, aes(x=clust_ind, y=estimates)) +
+    facet_grid(cols = vars(numberRE)) + 
+    labs(x = xlabel, y = ylabel,  title = title) +
+    geom_boxplot()
+  
+  if(!inc_out){p <- p +coord_cartesian(ylim = quantile(final_df$estimates, c(0.025, 0.975)))}
+  
+  return(p)
 
-hist(SingleSim[[6]][[4]], xlab = "Percent of Hidden States Predicted Correctly", 
-     main = "Percent of Hidden States Predicted Correctly")
+}
 
+DecodeBoxplot <- function(SingleSim,title){
 
-
+  num_of_sims <- length(SingleSim)
+  final_df <- data.frame()
+  
+  for (sim_ind in 1:num_of_sims){
+    nRE <- SingleSim[[sim_ind]][[8]]
+    
+    working_df <- data.frame(estimates = as.vector(SingleSim[[sim_ind]][[9]]),
+                             accType = rep(c("Both","Wake","Sleep"),dim(SingleSim[[sim_ind]][[9]])[2]),
+                             numberRE = nRE)
+    final_df <- rbind(final_df,working_df)
+  }
+  
+  final_df$numberRE <- factor(final_df$numberRE,levels = c(sort(unique(final_df$numberRE))))
+  
+  
+    
+  
+  
+  ggplot(final_df, aes(x=accType, y=estimates, color = accType)) +
+    geom_boxplot()+
+    facet_grid(cols = vars(numberRE)) +
+    labs(x = "Activity Type", y = "Percent Correcly Predicted")+ 
+    guides(color="none") + 
+    ggtitle(title)
+}
+    
+  
 ```
 
 
+```{r,fig.width=10, fig.height = 7.5, echo =FALSE}
+
+init_cond <- SingleSim[[1]][[10]]
+
+p1 <- ggplot(data = data.frame(x = c(-8, 13)), aes(x)) +
+  stat_function(fun = dnorm, n = 10000, args = list(mean = init_cond[[2]][1], sd = init_cond[[2]][2]), 
+                 aes(colour = "Sleep Activity"))  +
+  stat_function(fun = dnorm, n = 10000, args = list(mean = init_cond[[1]][1], sd = init_cond[[1]][2]), 
+                 aes(colour = "Wake Activity"))  +
+  #scale_y_continuous(breaks = NULL) +
+  labs(x = "Activity", y="", title="True Activity by State") + theme(legend.position="bottom")
+
+p2 <- ggplot(data = data.frame(x = c(-8, 13)), aes(x)) +
+    #scale_y_continuous(breaks = NULL) +
+    labs(x = "RE", y="", title="True RE Distribution")
+
+if (init_cond[[4]] == "norm"){
+  p2 <- p2 + stat_function(fun = dnorm, n = 10000, args = list(mean = 0, sd = 2)) 
+} else if (init_cond[[4]] == "gamma"){
+  
+  dgamma1 <- function(x,shape,rate){
+    return(dgamma(x+2,shape,rate))
+  }
+  
+  p2 <- p2 + geom_function(fun = dgamma1, args = list(shape = 2, rate = 1))
+} else if (init_cond[[4]] == "student"){
+  p2 <- p2 + stat_function(fun = dt, n = 10000, args = list(df=2))
+}
+
+  
+
+grid.arrange(p1,p2,nrow=2)
+
+
+tran_plots <- PlotTran(SingleSim)
+tran_plots[[1]]
+tran_plots[[3]]
+
+tran_plots[[2]]
+tran_plots[[4]]
+
+
+grid.arrange(BoxplotClust(3,F),
+             BoxplotClust(5),nrow=2)
+
+
+
+DecodeBoxplot(SingleSim,"Prediction By Activity Type and Number of Clusters")
+
+grid.arrange(SimBoxplot(SingleSim,1,2,2,T,"Initial Probability"),
+             SimBoxplot(SingleSim,3,2,1,T,"Wake Activity SE",2),
+             SimBoxplot(SingleSim,3,2,2,T,"Sleep Activity",1),
+             SimBoxplot(SingleSim,3,2,2,T,"Sleep Activity SE",2),
+             ncol= 2)
+
+
+
+
+
+SimBoxplot(SingleSim,6,2,0,F,"Likelihood Step Decreases")
+```
 
 ```{r}
-# labswap <- which(like_array < -4230000)
+KL <- function(param1,param2){
+  mu1 <- param1[1]
+  sig1 <- param1[2]
+  mu2 <- param2[1]
+  sig2 <- param2[2]
+  
+  return(log(sig2/sig1)+(sig1^2 + (mu1-mu2)^2)/(2*sig2^2) - 1/2)
+}
+
+KL(c(0,2),c(6,3))
+
+
+KL(c(0,2),c(2,3))
+
+# Error in serverSocket(port = port) : 
+#   creation of server socket failed: port 11475 cannot be opened
+# Calls: makeCluster -> makePSOCKcluster -> serverSocket
+# Execution halted
+
+# x <- seq(0,2*pi,.1)
+# b1 <- seq(-1,-.8,.1)
+# b2 <- seq(.8,1,.1)
+# b3 <- seq(-.6,-.4,.1)
+# b4 <- seq(.4,.6,.1)
 # 
-# reset_est_array[,labswap]
-# pil_est_array[,labswap]
+#   for(i1 in 1:length(b1)){
+#     for(i2 in 1:length(b2)){
+#       for(i3 in 1:length(b1)){
+#         for(i4 in 1:length(b2)){
+#           plot(b1[i1]*cos(x) + b2[i2]*sin(x)+b3[i3]*cos(2*x) + b4[i4]*sin(2*x),type = "l",
+#                main = paste(b1[i1],b2[i2],b3[i3],b4[i4]))
+#         }
+#       }
+#   }
+#   }
+
+b1 <- -.8
+b2 <- 1
+b3 <- -.5
+b4 <- .4
+
+plot(b1*cos(x) + b2*sin(x)+b3*cos(2*x) + b4*sin(2*x),type = "l")
+
 ```
+
