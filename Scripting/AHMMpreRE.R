@@ -899,6 +899,7 @@ alpha <- Forward(act,light,init,params_tran,emit_act,emit_light,covar_mat_emis,c
 print("POST ALPHA")
 beta <- Backward(act,light,params_tran,emit_act,emit_light,covar_mat_emis,covar_mat_tran,wake_sleep_corr,act_light_binom)
 
+break
 
 new_likelihood <- CalcLikelihood(alpha)
 likelihood_vec <- c(new_likelihood)
