@@ -349,7 +349,7 @@ p = add_processing(
 p + labs(color='Number of Support Points',title = "Wake/Sleep/Total Accuracy by Model, Sample Size, and RE Distribution") + 
   guides(size = F, shape = F, linetype = F)
 
-# ggsave("finalprojNL2.png",width = 9,height = 9)
+# ggsave("NestedLoopAcc.png",width = 9,height = 9)
 ```
 
 ```{r}
@@ -481,5 +481,6 @@ p = add_processing(
 p + labs(color='Number of Support Points',title = "Transition Residuals by Model, Sample Size, and RE Distribution") + 
   guides(size = F, shape = F, linetype = F)
 
-# ggsave("finalprojNL3.png",width = 8,height = 8)
+# ggsave("NestedLoopTran.png",width = 9,height = 9)
 ```
+
