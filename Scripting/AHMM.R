@@ -20,8 +20,8 @@ RE_type <- as.character(commandArgs(TRUE)[3])
 print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",RE_num))
 
 
-if(is.na(RE_num)){RE_num <- 4}
-if(is.na(sim_size)){sim_size <- 4}
+if(is.na(RE_num)){RE_num <- 2}
+if(is.na(sim_size)){sim_size <- 1}
 if(is.na(RE_type)){RE_type <- "norm"}
 
 
@@ -421,6 +421,7 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
   
   # tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
   tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),Params2TranVector, len = len, params_tran = params_tran)
+  tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
   
   for (init_state in 1:2){
     for (new_state in 1:2){
@@ -428,7 +429,7 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
       tran_vals_re <- foreach(re_ind = 1:dim(emit_act)[3]) %:% 
         foreach(ind = 1:length(alpha), .combine = 'cbind')%dopar% {
           
-          tran_ind <- ChooseTran(covar_mat_tran[ind,])
+          tran_ind <- tran_ind_vec[ind]
           # tran_vec <- sapply(c(2:(len)),FUN = Params2Tran,params_tran = params_tran,index=tran_ind)
           tran_vec <- tran_list[[tran_ind]]
           
@@ -465,8 +466,9 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
       tran_vals <- apply(tran_vals_re, c(1,2), sum)
       
       for (ind in 1:length(alpha)){
-        tran_ind <- ChooseTran(covar_mat_tran[ind,])
-        tran_vec <- sapply(c(2:(len)),FUN = Params2Tran,params_tran = params_tran,index=tran_ind)
+        
+        tran_ind <- tran_ind_vec[ind]
+        tran_vec <- tran_list[[tran_ind]]
         
         if(init_state == 1 & new_state == 1){
           # tran_prime <- -tran[1,2]
@@ -716,6 +718,27 @@ Tran2DF <- function(params_tran){
   return(tran_df)
 }
 
+readCpp <- function(path) {
+  tryCatch(
+    {
+      sourceCpp(file = path)
+    },
+    error = function(cond) {
+      message("Wrong environment")
+      # Choose a return value in case of error
+      NA
+    },
+    warning = function(cond) {
+      message("Wrong environment")
+      # Choose a return value in case of warning
+      NULL
+    },
+    finally = {
+      message("Done")
+    }
+  )
+}
+
 #### User Settings Start Here ####
 
 library(matrixStats)
@@ -733,9 +756,11 @@ library(lme4)
 library(mclust)
 library(Rcpp)
 library(RcppArmadillo)
+library(profvis)
 # library(emdbook)
 
-sourceCpp(file = "Scripting/cFunctions.cpp")
+readCpp("Scripting/cFunctions.cpp")
+readCpp("/panfs/jay/groups/29/mfiecas/aron0064/ActHMM/Rcode/cFunctions.cpp")
 
 
 #### Set True Parameters ####
@@ -796,7 +821,7 @@ act_light_binom_true <- c(0)
 #### Simulate True Data ####
 
 if (!real_data){
-  if (is.na(sim_num)){sim_num <- 101}
+  if (is.na(sim_num)){sim_num <- 1}
   if (set_seed){set.seed(sim_num)}
   
   if (sim_size == 0){
@@ -930,35 +955,41 @@ act_cv.df <- data.frame(activity = as.vector(act),
                         SEQN = id_mat)
 
 
-# break
 
-print("PRE PAR")
+# print("PRE PAR")
+# 
+# smallcore <- 4
+# largecore <- 4
+# 
+# if ((parallel::detectCores() - 1) > 8){
+#   n.cores <- largecore
+# } else {
+#   n.cores <- smallcore
+# }
+# 
+# 
+# print(paste0("RE num:",RE_num,"N cores detected:",parallel::detectCores()))
+# 
+# # cl <- makeCluster(n.cores)
+# cl <- parallel::makeCluster(n.cores, setup_strategy = "sequential")
+# 
+# print("PRE REG")
+# 
+# registerDoParallel(cl)
+# 
+# 
+# print("POST REG")
+# 
+# clusterExport(cl,c('ForwardInd','BackwardInd','logClassification','logSumExp','dnorm','ChooseTran', 'epsilon','lepsilon',
+#                    'Params2Tran','Param2TranHelper','expit','SumOverREIndTime','sourceCpp'))
+# 
+# 
+# # if (n.cores == smallcore){clusterCall(cl, function() sourceCpp(file = "Scripting/cFunctions.cpp"))}
+# if (n.cores == largecore){clusterCall(cl, function() sourceCpp(file = "/panfs/jay/groups/29/mfiecas/aron0064/ActHMM/Rcode/cFunctions.cpp"))}
+# 
+# print(paste0("RE num:",RE_num,"Par registered:",foreach::getDoParRegistered()))
+# print(paste0("RE num:",RE_num,"Par workers:",foreach::getDoParWorkers()))
 
-if ((parallel::detectCores() - 1) > 8){
-  n.cores <- 8
-} else {
-  n.cores <- 4
-}
-
-print(paste0("RE num:",RE_num,"N cores detected:",parallel::detectCores()))
-
-# cl <- makeCluster(n.cores)
-cl <- parallel::makeCluster(n.cores, setup_strategy = "sequential")
-
-print("PRE REG")
-
-registerDoParallel(cl)
-
-
-print("POST REG")
-
-clusterExport(cl,c('ForwardInd','BackwardInd','logClassification','logSumExp','dnorm','ChooseTran', 'epsilon','lepsilon',
-                   'Params2Tran','Param2TranHelper','expit','SumOverREIndTime','logClassificationC','vectorEqBool','sourceCpp'))
-
-clusterCall(cl, function() sourceCpp(file = "Scripting/cFunctions.cpp"))
-
-print(paste0("RE num:",RE_num,"Par registered:",foreach::getDoParRegistered()))
-print(paste0("RE num:",RE_num,"Par workers:",foreach::getDoParWorkers()))
 
 
 print("PRE ALPHA")
@@ -975,8 +1006,8 @@ like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
-tic()
-while(like_diff > 1e-1){
+# tic()
+while(like_diff > 1e-3){
   start_time <- Sys.time()
   likelihood <- new_likelihood
   
@@ -1088,13 +1119,9 @@ while(like_diff > 1e-1){
   end_time <- Sys.time()
   time_vec <- c(time_vec,as.numeric(end_time - start_time))
   # print(paste("RE num",RE_num, "memory",sum(gc(T)[,6])))
-  
-  break
 }
+# toc()
 
-toc()
-
-break
 
 print(paste("Sim Num:",sim_num,"RE Num:",RE_num,"Ending"))
 
@@ -1103,8 +1130,11 @@ decoded_mat <- sapply(c(1:num_of_people), ViterbiInd)
 
 
 total_acc <- (sum(decoded_mat == 0 & mc ==0) + sum(decoded_mat == 1 & mc ==1))/(num_of_people*day_length)
-wake_acc <- sum(decoded_mat == 0 & mc ==0)/(sum(decoded_mat == 0 & mc ==0) + sum(decoded_mat == 1 & mc ==0))
-sleep_acc <- sum(decoded_mat == 1 & mc ==1)/(sum(decoded_mat == 1 & mc ==1) + sum(decoded_mat == 0 & mc ==1))
+wake_acc <- sum(decoded_mat == 0 & mc ==0)/sum(mc ==0)
+sleep_acc <- sum(decoded_mat == 1 & mc ==1)/sum(mc ==1)
+
+perc_pred_wake <- sum(decoded_mat == 0 & mc ==0)/sum(decoded_mat ==0)
+perc_pred_sleep <- sum(decoded_mat == 1 & mc ==1)/sum(decoded_mat == 1)
 
 
 starting_conditions <- list(wake_params,
@@ -1137,7 +1167,7 @@ tran_list <- list(tran_df,tran_sum_df)
 if (!real_data){
   true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,pi_l_true_emp,clust_ind_true)
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
-  mc_list <- list(mc,decoded_mat,total_acc,wake_acc,sleep_acc)
+  mc_list <- list(mc,decoded_mat,total_acc,wake_acc,sleep_acc,perc_pred_wake,perc_pred_sleep)
   params_to_save <- list(true_params,est_params,likelihood_vec,mc_list,starting_conditions,tran_list)
 } else {
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
@@ -1155,11 +1185,6 @@ if(sim_size != 0){
 
 #####################
 
-
-# Error in serverSocket(port = port) : 
-#   creation of server socket failed: port 11475 cannot be opened
-# Calls: makeCluster -> makePSOCKcluster -> serverSocket
-# Execution halted
 
 # library(profvis)
 # profvis(Backward(act,params_tran,emit_act,covar_mat_tran,act_light_binom))
