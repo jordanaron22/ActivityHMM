@@ -851,6 +851,7 @@ if (!real_data){
   mc <- simulated_hmm[[1]]
   act <- simulated_hmm[[2]]
   covar_mat_tran <- simulated_hmm[[3]]
+  tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
   act_lod <- simulated_hmm[[4]]
   clust_ind_true <- simulated_hmm[[5]]
   
@@ -906,7 +907,9 @@ if(real_data){
   covar_mat_tran[,1] <- 1
   for (i in 1:length(id$poverty)){
     covar_mat_tran[i,id$poverty[i]] <- 1
-  }
+  } 
+  
+  tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
   
   act <- log(wave_data[[1]] + epsilon)
   light <- log(wave_data[[2]] + epsilon)
@@ -945,6 +948,8 @@ params_tran <- params_tran_true
 emit_act <- emit_act_true
 act_light_binom <- act_light_binom_true
 pi_l <- pi_l_true
+
+tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
 
 time_vec <- c()
 
@@ -990,12 +995,10 @@ act_cv.df <- data.frame(activity = as.vector(act),
 # print(paste0("RE num:",RE_num,"Par registered:",foreach::getDoParRegistered()))
 # print(paste0("RE num:",RE_num,"Par workers:",foreach::getDoParWorkers()))
 
-break
-
 print("PRE ALPHA")
-alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom)
+alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
 print("POST ALPHA")
-beta <- Backward(act,params_tran,emit_act,covar_mat_tran,act_light_binom)
+beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
 
 # apply(alpha[[2]][,,1]+beta[[2]][,,1],1,logSumExp)
 
@@ -1006,8 +1009,9 @@ like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
-# tic()
+
 while(abs(like_diff) > 1e-3){
+  tic()
   start_time <- Sys.time()
   likelihood <- new_likelihood
   
@@ -1032,6 +1036,8 @@ while(abs(like_diff) > 1e-3){
   } else {
     params_tran <- params_tran - solve(hess,grad)
   }
+  
+  tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
   ##################
   act_vec <- as.vector(act)
   lod_act_weight <- as.numeric(act_vec==log(epsilon))
@@ -1108,8 +1114,8 @@ while(abs(like_diff) > 1e-3){
   
 
 
-  alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom)
-  beta <- Backward(act,params_tran,emit_act,covar_mat_tran,act_light_binom)
+  alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
+  beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
   
   new_likelihood <- CalcLikelihood(alpha,pi_l)
   like_diff <- new_likelihood - likelihood
@@ -1119,8 +1125,9 @@ while(abs(like_diff) > 1e-3){
   end_time <- Sys.time()
   time_vec <- c(time_vec,as.numeric(end_time - start_time))
   # print(paste("RE num",RE_num, "memory",sum(gc(T)[,6])))
+  toc()
 }
-# toc()
+
 
 
 print(paste("Sim Num:",sim_num,"RE Num:",RE_num,"Ending"))
