@@ -20,8 +20,8 @@ RE_type <- as.character(commandArgs(TRUE)[3])
 print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",RE_num))
 
 
-if(is.na(RE_num)){RE_num <- 2}
-if(is.na(sim_size)){sim_size <- 1}
+if(is.na(RE_num)){RE_num <- 3}
+if(is.na(sim_size)){sim_size <- 0}
 if(is.na(RE_type)){RE_type <- "norm"}
 
 
@@ -171,16 +171,16 @@ BackwardInd <- function(act_ind, tran_list, emit_act,tran_ind,act_light_binom,cl
   beta[n,1] <- log(1)
   beta[n,2] <- log(1)
   
-  # log_class_0 <- lapply(c(1:n),logClassification,current_state = 0,act= act_ind, emit_act=emit_act, act_light_binom=act_light_binom,clust_i = clust_i)
-  # log_class_1 <- lapply(c(1:n),logClassification,current_state = 1,act= act_ind, emit_act=emit_act, act_light_binom=act_light_binom,clust_i = clust_i)
+  log_class_0 <- unlist(lapply(c(1:n),logClassification,current_state = 0,act= act_ind, emit_act=emit_act, act_light_binom=act_light_binom,clust_i = clust_i))
+  log_class_1 <- unlist(lapply(c(1:n),logClassification,current_state = 1,act= act_ind, emit_act=emit_act, act_light_binom=act_light_binom,clust_i = clust_i))
   
-  log_class_0 <- logClassificationC(current_state = 0, act_obs = act_ind,
-                                    mu = emit_act[1,1,clust_i], sig = emit_act[1,2,clust_i],
-                                    act_binom = act_light_binom,lod = lepsilon)
-
-  log_class_1 <- logClassificationC(current_state = 1, act_obs = act_ind,
-                                    mu = emit_act[2,1,clust_i], sig = emit_act[2,2,clust_i],
-                                    act_binom = act_light_binom,lod = lepsilon)
+  # log_class_0 <- logClassificationC(current_state = 0, act_obs = act_ind,
+  #                                   mu = emit_act[1,1,clust_i], sig = emit_act[1,2,clust_i],
+  #                                   act_binom = act_light_binom,lod = lepsilon)
+  # 
+  # log_class_1 <- logClassificationC(current_state = 1, act_obs = act_ind,
+  #                                   mu = emit_act[2,1,clust_i], sig = emit_act[2,2,clust_i],
+  #                                   act_binom = act_light_binom,lod = lepsilon)
 
   
   for (i in (n-1):1){
@@ -244,16 +244,16 @@ TranByTimeVec <- function(index, params_tran, time_vec){
 ForwardInd <- function(act_ind, init, tran_list, emit_act,tran_ind,act_light_binom,clust_i) {
   alpha <- matrix(0, ncol = 2, nrow=length(act_ind))
   
-  # log_class_0 <- lapply(c(1:n),logClassification,current_state = 0,act= act_ind, emit_act=emit_act, act_light_binom=act_light_binom,clust_i = clust_i)
-  # log_class_1 <- lapply(c(1:n),logClassification,current_state = 1,act= act_ind, emit_act=emit_act, act_light_binom=act_light_binom,clust_i = clust_i)
+  log_class_0 <- unlist(lapply(c(1:length(act_ind)),logClassification,current_state = 0,act= act_ind, emit_act=emit_act, act_light_binom=act_light_binom,clust_i = clust_i))
+  log_class_1 <- unlist(lapply(c(1:length(act_ind)),logClassification,current_state = 1,act= act_ind, emit_act=emit_act, act_light_binom=act_light_binom,clust_i = clust_i))
   
-  log_class_0 <- logClassificationC(current_state = 0, act_obs = act_ind, 
-                                    mu = emit_act[1,1,clust_i], sig = emit_act[1,2,clust_i],
-                                    act_binom = act_light_binom,lod = lepsilon)
-  
-  log_class_1 <- logClassificationC(current_state = 1, act_obs = act_ind, 
-                                    mu = emit_act[2,1,clust_i], sig = emit_act[2,2,clust_i],
-                                    act_binom = act_light_binom,lod = lepsilon)
+  # log_class_0 <- logClassificationC(current_state = 0, act_obs = act_ind,
+  #                                   mu = emit_act[1,1,clust_i], sig = emit_act[1,2,clust_i],
+  #                                   act_binom = act_light_binom,lod = lepsilon)
+  # 
+  # log_class_1 <- logClassificationC(current_state = 1, act_obs = act_ind, 
+  #                                   mu = emit_act[2,1,clust_i], sig = emit_act[2,2,clust_i],
+  #                                   act_binom = act_light_binom,lod = lepsilon)
   
   alpha[1,1] <- log(init[1]) + log_class_0[1]
   
@@ -825,7 +825,7 @@ if (!real_data){
   if (set_seed){set.seed(sim_num)}
   
   if (sim_size == 0){
-    day_length <- 96 
+    day_length <- 96 * 3
     num_of_people <- 200
   } else if (sim_size == 1){
     day_length <- 96 
@@ -990,7 +990,7 @@ act_cv.df <- data.frame(activity = as.vector(act),
 # print(paste0("RE num:",RE_num,"Par registered:",foreach::getDoParRegistered()))
 # print(paste0("RE num:",RE_num,"Par workers:",foreach::getDoParWorkers()))
 
-
+break
 
 print("PRE ALPHA")
 alpha <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom)
@@ -1007,7 +1007,7 @@ like_diff <- new_likelihood - likelihood
 # grad_num <- grad(LogLike,params_tran)
 
 # tic()
-while(like_diff > 1e-3){
+while(abs(like_diff) > 1e-3){
   start_time <- Sys.time()
   likelihood <- new_likelihood
   
@@ -1184,25 +1184,3 @@ if(sim_size != 0){
 # unregister_dopar()
 
 #####################
-
-
-# library(profvis)
-# profvis(Backward(act,params_tran,emit_act,covar_mat_tran,act_light_binom))
-# 
-# x <- Backward(act,params_tran,emit_act,covar_mat_tran,act_light_binom)
-# 
-# all.equal(unlist(test_beta),unlist(x))
-
-
-# profvis(Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom))
-# 
-# x <- Forward(act,init,params_tran,emit_act,covar_mat_tran,act_light_binom)
-# 
-# all.equal(unlist(test_alpha),unlist(x))
-
-
-
-# profvis(CalcTran(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l))
-# 
-# x <- CalcTran(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l)
-# all.equal(unlist(gradhess),unlist(x))
