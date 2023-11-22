@@ -21,7 +21,7 @@ print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",R
 
 
 if(is.na(RE_num)){RE_num <- 3}
-if(is.na(sim_size)){sim_size <- 0}
+if(is.na(sim_size)){sim_size <- 4}
 if(is.na(RE_type)){RE_type <- "norm"}
 
 
@@ -406,6 +406,15 @@ Params2TranVector <- function(index,len,params_tran){
   return(sapply(c(2:(len)),FUN = Params2Tran,params_tran = params_tran,index=index))
 }
 
+Params2TranVectorT <- function(index,len,params_tran){
+  return(t(sapply(c(2:(len)),FUN = Params2Tran,params_tran = params_tran,index=index)))
+}
+
+IndLike <- function(alpha,pi_l,ind,len){
+  likelihood <- logSumExp(SumOverREIndTime(alpha,pi_l,ind,len))
+  return(likelihood)
+}
+  
 
 CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l, return_grad = F){
   
@@ -419,9 +428,10 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
   cos_sin_part <- numeric(2)
   
   
-  # tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
-  tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),Params2TranVector, len = len, params_tran = params_tran)
+  # tran_mat <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
+  tran_list_mat <- lapply(c(1:dim(covar_mat_tran)[2]),Params2TranVector, len = len, params_tran = params_tran)
   tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
+  ind_like_vec <- unlist(lapply(c(1:length(alpha)),IndLike,alpha = alpha, pi_l = pi_l, len = len))
   
   for (init_state in 1:2){
     for (new_state in 1:2){
@@ -431,7 +441,7 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
           
           tran_ind <- tran_ind_vec[ind]
           # tran_vec <- sapply(c(2:(len)),FUN = Params2Tran,params_tran = params_tran,index=tran_ind)
-          tran_vec <- tran_list[[tran_ind]]
+          tran_vec <- tran_list_mat[[tran_ind]]
           
           #1,1->1 & 2,1->2 & 1,2->3 & 2,2->4
           tran_vec_ind <- init_state * new_state
@@ -439,7 +449,7 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
           
           alpha_ind <- alpha[[ind]]
           beta_ind <- beta[[ind]]
-          likelihood <- logSumExp(SumOverREIndTime(alpha,pi_l,ind,len))
+          likelihood <- ind_like_vec[ind]
           
           act_ind <- act[,ind]
           
@@ -468,7 +478,7 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
       for (ind in 1:length(alpha)){
         
         tran_ind <- tran_ind_vec[ind]
-        tran_vec <- tran_list[[tran_ind]]
+        tran_vec <- tran_list_mat[[tran_ind]]
         
         if(init_state == 1 & new_state == 1){
           # tran_prime <- -tran[1,2]
@@ -493,6 +503,126 @@ CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_ligh
           # tran_prime_prime <- -tran[2,1] * tran[2,2]
           tran_prime <- tran_vec[4,]
           tran_prime_prime <- -tran_vec[2,] * tran_vec[4,]
+        }
+        
+        #Maybe change this back to 1:len-1
+        cos_vec <- cos(2*pi*c(2:(len))/96)
+        sin_vec <- sin(2*pi*c(2:(len))/96)
+        
+        gradient[init_state,tran_ind] <- gradient[init_state,tran_ind] + sum(tran_vals[,ind]*tran_prime)
+        if (tran_ind != 1){
+          gradient[init_state,1] <- gradient[init_state,1] + sum(tran_vals[,ind]*tran_prime)
+        }
+        gradient[init_state,7] <- gradient[init_state,7] + sum(tran_vals[,ind]*tran_prime*cos_vec)
+        gradient[init_state,8] <- gradient[init_state,8] + sum(tran_vals[,ind]*tran_prime*sin_vec)
+        
+        
+        
+        hessian_vec[init_state,tran_ind] <- hessian_vec[init_state,tran_ind] + sum(tran_vals[,ind]*tran_prime_prime)
+        cos_part_vec[init_state,tran_ind] <- cos_part_vec[init_state,tran_ind] + sum(tran_vals[,ind]*tran_prime_prime*cos_vec)
+        sin_part_vec[init_state,tran_ind] <- sin_part_vec[init_state,tran_ind] + sum(tran_vals[,ind]*tran_prime_prime*sin_vec)
+        if (tran_ind != 1){
+          hessian_vec[init_state,1] <- hessian_vec[init_state,1] + sum(tran_vals[,ind]*tran_prime_prime)
+          cos_part_vec[init_state,1] <- cos_part_vec[init_state,1] + sum(tran_vals[,ind]*tran_prime_prime*cos_vec)
+          sin_part_vec[init_state,1] <- sin_part_vec[init_state,1] + sum(tran_vals[,ind]*tran_prime_prime*sin_vec)
+        }
+        
+        hessian_vec[init_state,7] <- hessian_vec[init_state,7] + sum(tran_vals[,ind]*tran_prime_prime*cos_vec^2)
+        hessian_vec[init_state,8] <- hessian_vec[init_state,8] + sum(tran_vals[,ind]*tran_prime_prime*sin_vec^2)
+        cos_sin_part[init_state] <- cos_sin_part[init_state] + sum(tran_vals[,ind]*tran_prime_prime*cos_vec*sin_vec)
+        
+        
+      }
+      
+      
+    }
+  }
+  
+  gradient <- as.vector(t(gradient))
+  
+  diag(hessian) <- c(hessian_vec[1,],hessian_vec[2,])
+  hessian[1,1:6] <- c(hessian_vec[1,1:6])
+  hessian[1:6,1] <- c(hessian_vec[1,1:6])
+  hessian[7,1:6] <- cos_part_vec[1,]
+  hessian[1:6,7] <- cos_part_vec[1,]
+  hessian[8,1:6] <- sin_part_vec[1,]
+  hessian[1:6,8] <- sin_part_vec[1,]
+  hessian[7,8] <- cos_sin_part[1]
+  hessian[8,7] <- cos_sin_part[1]
+  
+  hessian[9:14,9] <- c(hessian_vec[2,1:6])
+  hessian[9,9:14] <- c(hessian_vec[2,1:6])
+  hessian[15,9:14] <- cos_part_vec[2,]
+  hessian[9:14,15] <- cos_part_vec[2,]
+  hessian[16,9:14] <- sin_part_vec[2,]
+  hessian[9:14,16] <- sin_part_vec[2,]
+  hessian[15,16] <- cos_sin_part[2]
+  hessian[16,15] <- cos_sin_part[2]
+  
+  
+  if(return_grad){
+    return(-gradient)
+  } else {
+    return(list(-gradient,-hessian))
+  }
+}
+
+CalcTranC <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l, return_grad = F){
+  
+  len <- dim(act)[1]
+  
+  gradient <- matrix(0,2,8)
+  hessian <- matrix(0,16,16)
+  hessian_vec <- matrix(0,2,8)
+  cos_part_vec <- matrix(0,2,6)
+  sin_part_vec <- matrix(0,2,6)
+  cos_sin_part <- numeric(2)
+  
+  
+  # tran_mat <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
+  tran_list_mat <- lapply(c(1:dim(covar_mat_tran)[2]),Params2TranVectorT, len = len, params_tran = params_tran)
+  tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
+  ind_like_vec <- unlist(lapply(c(1:length(alpha)),IndLike,alpha = alpha, pi_l = pi_l, len = len))
+  
+  for (init_state in 1:2){
+    for (new_state in 1:2){
+      
+      
+      
+      
+      tran_vals_re <- CalcTranHelperC(init_state - 1,new_state - 1,
+                                      act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,act_light_binom,lepsilon, pi_l)
+      
+      tran_vals <- apply(tran_vals_re, c(1,2), sum)
+      
+      for (ind in 1:length(alpha)){
+        
+        tran_ind <- tran_ind_vec[ind]
+        tran_vec <- tran_list_mat[[tran_ind]]
+        
+        if(init_state == 1 & new_state == 1){
+          # tran_prime <- -tran[1,2]
+          # tran_prime_prime <- -tran[1,1] * tran[1,2]
+          tran_prime <- -tran_vec[,3]
+          tran_prime_prime <- -tran_vec[,3]*tran_vec[,1]
+          
+        } else if(init_state == 1 & new_state == 2){ 
+          # tran_prime <- tran[1,1]
+          # tran_prime_prime <- -tran[1,1] * tran[1,2]
+          tran_prime <- tran_vec[,1]
+          tran_prime_prime <- -tran_vec[,3]*tran_vec[,1]
+          
+        } else if(init_state == 2 & new_state == 2){ 
+          # tran_prime <- -tran[2,1]
+          # tran_prime_prime <- -tran[2,1] * tran[2,2]
+          tran_prime <- -tran_vec[,2]
+          tran_prime_prime <- -tran_vec[,2] * tran_vec[,4]
+          
+        } else if(init_state == 2 & new_state == 1){ 
+          # tran_prime <- tran[2,2]
+          # tran_prime_prime <- -tran[2,1] * tran[2,2]
+          tran_prime <- tran_vec[,4]
+          tran_prime_prime <- -tran_vec[,2] * tran_vec[,4]
         }
         
         #Maybe change this back to 1:len-1
@@ -996,9 +1126,13 @@ act_cv.df <- data.frame(activity = as.vector(act),
 # print(paste0("RE num:",RE_num,"Par workers:",foreach::getDoParWorkers()))
 
 print("PRE ALPHA")
+tic()
 alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
+toc()
 print("POST ALPHA")
+tic()
 beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
+toc()
 
 # apply(alpha[[2]][,,1]+beta[[2]][,,1],1,logSumExp)
 
@@ -1011,7 +1145,7 @@ like_diff <- new_likelihood - likelihood
 
 
 while(abs(like_diff) > 1e-3){
-  tic()
+  # tic()
   start_time <- Sys.time()
   likelihood <- new_likelihood
   
@@ -1026,7 +1160,11 @@ while(abs(like_diff) > 1e-3){
   ##################
   init <- CalcInit(alpha,beta,pi_l)
 
-  gradhess <- CalcTran(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l)
+  tic()
+  gradhess <- CalcTranC(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l)
+  toc()
+  
+  break
   grad <- gradhess[[1]]
   hess <- gradhess[[2]]
 
@@ -1125,10 +1263,10 @@ while(abs(like_diff) > 1e-3){
   end_time <- Sys.time()
   time_vec <- c(time_vec,as.numeric(end_time - start_time))
   # print(paste("RE num",RE_num, "memory",sum(gc(T)[,6])))
-  toc()
+  # toc()
 }
 
-
+break
 
 print(paste("Sim Num:",sim_num,"RE Num:",RE_num,"Ending"))
 

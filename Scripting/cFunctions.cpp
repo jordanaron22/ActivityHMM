@@ -33,6 +33,18 @@ NumericVector logClassificationC(int current_state, NumericVector act_obs, doubl
 }
 
 // [[Rcpp::export]]
+vec logClassificationC2(int current_state, NumericVector act_obs, double mu, double sig, double act_binom, double lod) {
+  vec temp;
+  if (current_state == 0) {
+    temp = Rcpp::dnorm( act_obs, mu, sig, true );
+  } else {
+    NumericVector vec_eq = vectorEqBool(act_obs, lod);
+    temp = log(((1-act_binom) * (1 - vec_eq) * Rcpp::dnorm( act_obs, mu, sig, false ))+(act_binom*vec_eq));
+  }
+  return temp;
+}
+
+// [[Rcpp::export]]
 double logSumExpC2(NumericVector lx){
 
   // Obtain environment containing function
@@ -190,6 +202,59 @@ List BackwardC(const NumericMatrix& act, List tran_list, cube emit_act, NumericV
 		beta_list(ind) = Cube1;
 	}
 	return(beta_list);
-}
+}  
 
+// [[Rcpp::export]]
+cube CalcTranHelperC(int init_state, int new_state, NumericMatrix act, List tran_list_mat, NumericVector tran_ind_vec, cube emit_act, NumericVector ind_like_vec, List alpha, List beta,double act_light_binom, double lepsilon, vec pi_l){
+  int num_people = act.ncol();
+  int len = act.nrow();
+  int num_re = emit_act.n_slices;
+
+  arma::cube tran_vals_re_cube( len-1, num_people, num_re );
+
+  for (int clust_i = 0; clust_i < num_re; clust_i++){
+
+	mat tran_vals_re_mat( len-1, num_people );
+
+    for (int ind = 0; ind < num_people; ind++) {
+      
+      int tran_ind = tran_ind_vec(ind);
+	  mat tran_mat = tran_list_mat(tran_ind-1);
+	  
+
+	  //0,0->0 & 1,0->1 & 0,1->2 & 1,1->3
+	  int tran_vec_ind = init_state + (new_state * 2);
+
+	  arma::cube alpha_ind = alpha(ind); 
+	  arma::cube beta_ind = beta(ind);
+	  double likelihood = ind_like_vec(ind);
+	  
+
+
+
+	  NumericMatrix act_ind = act( Range(1,len-1) , Range(ind,ind) );
+	  NumericVector act_ind_m1 = act_ind.column(0); 
+	  
+	  
+
+
+	  vec class_vec = logClassificationC2( new_state, act_ind_m1, emit_act(new_state,0,clust_i), emit_act(new_state,1,clust_i), act_light_binom, lepsilon );
+	  
+	  vec alpha_ind_slice = alpha_ind(span(0,len-2),span(init_state,init_state),span(clust_i,clust_i));
+	  vec beta_ind_slice = beta_ind(span(1,len-1),span(new_state,new_state),span(clust_i,clust_i));
+	  vec tran_vec_slice = tran_mat.col(tran_vec_ind);
+
+	  vec temp = alpha_ind_slice + beta_ind_slice + log(tran_vec_slice) + log(pi_l(clust_i)) + class_vec - likelihood;
+	  vec tran_vals_re_ind = arma::exp(temp);
+
+	  tran_vals_re_mat.col(ind) = tran_vals_re_ind;
+	
+    }
+
+	tran_vals_re_cube.slice(clust_i) = tran_vals_re_mat;
+    
+  }
+
+  return tran_vals_re_cube;
+}
 
