@@ -107,7 +107,7 @@ ParseSingleClust <- function(folder, path){
   like_array <- c()
   neg_step <- c()
   
-  vit_array <- matrix(0,3,length(file_list))
+  vit_array <- matrix(0,5,length(file_list))
   
   for (file_ind in 1:length(file_list)){
     load(file_list[file_ind])
@@ -144,6 +144,8 @@ ParseSingleClust <- function(folder, path){
     vit_array[1,file_ind] <- params_to_save[[4]][[3]]
     vit_array[2,file_ind] <- params_to_save[[4]][[4]]
     vit_array[3,file_ind] <- params_to_save[[4]][[5]]
+    vit_array[4,file_ind] <- params_to_save[[4]][[6]]
+    vit_array[5,file_ind] <- params_to_save[[4]][[7]]
     
   }
   
@@ -195,7 +197,7 @@ ParseSingleSim <- function(path){
 }
 
 
-path_size <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Sims/Norm/Size1"
+path_size <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Old/mix1/Size2/"
 SingleSim <- ParseSingleSim(path_size)  
 
 
@@ -410,6 +412,10 @@ if (init_cond[[4]] == "norm"){
     return(dgamma(x+2,shape,rate))
   }
   
+  mix1 <- function(x,shape,rate,mean,sd){
+    return(.5*dgamma(x,shape,rate) + .5*dnorm(x,mean,sd))
+  }
+  
   p2 <- p2 + geom_function(fun = dgamma1, args = list(shape = 2, rate = 1))
 } else if (init_cond[[4]] == "student"){
   p2 <- p2 + stat_function(fun = dt, n = 10000, args = list(df=2))
@@ -417,7 +423,7 @@ if (init_cond[[4]] == "norm"){
 
   
 
-grid.arrange(p1,p2,nrow=2)
+
 
 
 tran_plots <- PlotTran(SingleSim)
@@ -447,6 +453,45 @@ grid.arrange(SimBoxplot(SingleSim,1,2,2,T,"Initial Probability"),
 
 SimBoxplot(SingleSim,6,2,0,F,"Likelihood Step Decreases")
 ```
+
+
+```{r}
+# 
+# init_cond <- SingleSim[[1]][[10]]
+# 
+# p1 <- ggplot(data = data.frame(x = c(-5, 10)), aes(x)) +
+#   stat_function(fun = dnorm, n = 10000, args = list(mean = init_cond[[2]][1], sd = init_cond[[2]][2]), 
+#                  aes(colour = "Sleep Activity"))  +
+#   stat_function(fun = dnorm, n = 10000, args = list(mean = init_cond[[1]][1], sd = init_cond[[1]][2]), 
+#                  aes(colour = "Wake Activity"))  +
+#   #scale_y_continuous(breaks = NULL) +
+#   labs(x = "Activity", y="", title="True Activity by State",color="Activity Type") + theme(legend.position = c(.91,.5))
+# 
+# 
+# p2 <- ggplot(data = data.frame(x = c(-5, 10)), aes(x)) +
+#     #scale_y_continuous(breaks = NULL) +
+#     labs(x = "RE", y="", title="True RE Distribution")
+# 
+# 
+# p3 <- p2 + stat_function(fun = dnorm, n = 10000, args = list(mean = 0, sd = 2),aes(color = "Normal")) +
+#   geom_function(fun = dgamma1, args = list(shape = 2, rate = 1),aes(color = "Gamma")) +
+#   geom_function(fun = mix1, args = list(shape = 2, rate = 1,mean = -2,sd = 2), aes(color = "Normal/Gamma")) +
+#   labs(color = "RE Distribution") + theme(legend.position = c(.91,.5))
+# 
+# 
+# p4 <- p2 + stat_function(fun = dt, n = 10000, args = list(df=2), aes(color = "t (df = 2)"))+
+#   stat_function(fun = dt, n = 10000, args = list(df=3), aes(color = "t (df = 3)")) +
+#   labs(color = "RE Distribution") + theme(legend.position = c(.91,.5))
+# 
+# 
+# g <- grid.arrange(p1,p3,p4,
+#              ncol= 1)
+# 
+# g <- arrangeGrob(p1,p3,p4, nrow=3) #generates g
+# 
+# ggsave(file="REdist.png", g)
+```
+
 
 ```{r}
 KL <- function(param1,param2){
