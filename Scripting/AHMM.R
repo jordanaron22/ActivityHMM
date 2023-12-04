@@ -21,8 +21,8 @@ print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",R
 
 
 if(is.na(RE_num)){RE_num <- 3}
-if(is.na(sim_size)){sim_size <- 6}
-if(is.na(RE_type)){RE_type <- "norm"}
+if(is.na(sim_size)){sim_size <- 3}
+if(is.na(RE_type)){RE_type <- "mix1"}
 
 
 #### Functions ####
@@ -1134,41 +1134,6 @@ act_cv.df <- data.frame(activity = as.vector(act),
                         SEQN = id_mat)
 
 
-
-# print("PRE PAR")
-# 
-# smallcore <- 4
-# largecore <- 4
-# 
-# if ((parallel::detectCores() - 1) > 8){
-#   n.cores <- largecore
-# } else {
-#   n.cores <- smallcore
-# }
-# 
-# 
-# print(paste0("RE num:",RE_num,"N cores detected:",parallel::detectCores()))
-# 
-# # cl <- makeCluster(n.cores)
-# cl <- parallel::makeCluster(n.cores, setup_strategy = "sequential")
-# 
-# print("PRE REG")
-# 
-# registerDoParallel(cl)
-# 
-# 
-# print("POST REG")
-# 
-# clusterExport(cl,c('ForwardInd','BackwardInd','logClassification','logSumExp','dnorm','ChooseTran', 'epsilon','lepsilon',
-#                    'Params2Tran','Param2TranHelper','expit','SumOverREIndTime','sourceCpp'))
-# 
-# 
-# # if (n.cores == smallcore){clusterCall(cl, function() sourceCpp(file = "Scripting/cFunctions.cpp"))}
-# if (n.cores == largecore){clusterCall(cl, function() sourceCpp(file = "/panfs/jay/groups/29/mfiecas/aron0064/ActHMM/Rcode/cFunctions.cpp"))}
-# 
-# print(paste0("RE num:",RE_num,"Par registered:",foreach::getDoParRegistered()))
-# print(paste0("RE num:",RE_num,"Par workers:",foreach::getDoParWorkers()))
-
 print("PRE ALPHA")
 alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
 beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
@@ -1317,8 +1282,5 @@ if(sim_size != 0){
   save(params_to_save,file = paste0(RE_type,RE_num,"Size",sim_size,"Seed",sim_num,".rda"))
 }
 
-
-# parallel::stopCluster(cl)
-# unregister_dopar()
 
 #####################
