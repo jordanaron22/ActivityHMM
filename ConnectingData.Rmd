@@ -14,6 +14,9 @@ library(lubridate)
 library(reshape2)
 require(gridExtra)
 
+
+# load("Data/PAXPREDMG_long.rda")
+# pred_long_G <- long_data
 load("Data/PAXPREDMH_long.rda")
 pred_long_H <- long_data
 
@@ -47,7 +50,6 @@ acth_long_H[acth_long_H == -.01] <- NA
 
 # flag_long_G[,4:1443][flag_long_G[,4:1443] > 0 ] <- NA
 # acth_long_G[,4:1443] <- acth_long_G[,4:1443] + flag_long_G[,4:1443]
-
 flag_long_H[,4:1443][flag_long_H[,4:1443] > 0 ] <- NA
 acth_long_H[,4:1443] <- acth_long_H[,4:1443] + flag_long_H[,4:1443]
 
@@ -60,16 +62,23 @@ acth_long_H[,4:1443] <- acth_long_H[,4:1443] + flag_long_H[,4:1443]
 # nonwear_long[,3:1442] <- (pred_long[,3:1442] !=3)
 # nonwear_long[nonwear_long==F] <- NA
 
+# pred_long_G[,4:1443] <- (pred_long_G[,4:1443] !=3)
+# pred_long_G[is.na(pred_long_G)] <- F
 pred_long_H[,4:1443] <- (pred_long_H[,4:1443] !=3)
 pred_long_H[is.na(pred_long_H)] <- F
 
+
+# acth_long_G[pred_long_G == F] <- NA
+# lux_long_G[pred_long_G == F] <- NA
 acth_long_H[pred_long_H == F] <- NA
 lux_long_H[pred_long_H == F] <- NA
 
 #Trims top .0001%
+# acth_long_G[,4:1443][acth_long_G[,4:1443] > quantile(acth_long_G[,4:1443], probs = .9999,na.rm = T)] <- NA
 acth_long_H[,4:1443][acth_long_H[,4:1443] > quantile(acth_long_H[,4:1443], probs = .9999,na.rm = T)] <- NA
 #Doesnt actually remove any lux values
 #Max value of 2500, approx 300k times
+# lux_long_G[,4:1443][lux_long_G[,4:1443] > quantile(lux_long_G[,4:1443], probs = .9999,na.rm = T)] <- NA
 lux_long_H[,4:1443][lux_long_H[,4:1443] > quantile(lux_long_H[,4:1443], probs = .9999,na.rm = T)] <- NA
 ```
 
@@ -95,11 +104,13 @@ AddVariable <- function(var_name,add_data, seqn_freq,seqn_list){
 #                            houseFS = AddVariable("FSDHH" ,food_sec, seqn_freq, seqn_list),
 #                            insurance = AddVariable("HIQ011" ,health_insurance, seqn_freq, seqn_list))
 
-seqn_freq <- table(acth_long_H$SEQN)
-seqn_list <- unique(acth_long_H$SEQN)
-demo <- read.xport("Raw Data/DEMO_H.XPT")
-health_insurance <- read.xport("Raw Data/HIQ_H.XPT")
-food_sec <- read.xport("Raw Data/FSQ_H.XPT")
+#######################NEED TO DOWNLOAD FOR _G AND FIX CODE GOING FORWARD
+
+seqn_freq_H <- table(acth_long_H$SEQN)
+seqn_list_H <- unique(acth_long_H$SEQN)
+demo_H <- read.xport("Raw Data/DEMO_H.XPT")
+health_insurance_H <- read.xport("Raw Data/HIQ_H.XPT")
+food_sec_H <- read.xport("Raw Data/FSQ_H.XPT")
 
 
 ########
@@ -107,35 +118,33 @@ food_sec <- read.xport("Raw Data/FSQ_H.XPT")
 #To include weights for wave G and H just divide all weights by 2
 # demo$WTMEC2YR 
 
-covariate_df <- data.frame(gender = AddVariable("RIAGENDR" ,demo, seqn_freq, seqn_list),
-                           houseFS = AddVariable("FSDHH" ,food_sec, seqn_freq, seqn_list),
-                           race = AddVariable("RIDRETH3" ,demo, seqn_freq, seqn_list),
-                           poverty = AddVariable("INDFMPIR" ,demo, seqn_freq, seqn_list),
-                           sweights = AddVariable("WTMEC2YR" ,demo, seqn_freq, seqn_list))
+covariate_df_H <- data.frame(gender = AddVariable("RIAGENDR" ,demo_H, seqn_freq_H, seqn_list_H),
+                           houseFS = AddVariable("FSDHH" ,food_sec_H, seqn_freq_H, seqn_list_H),
+                           race = AddVariable("RIDRETH3" ,demo_H, seqn_freq_H, seqn_list_H),
+                           poverty = AddVariable("INDFMPIR" ,demo_H, seqn_freq_H, seqn_list_H),
+                           sweights = AddVariable("WTMEC2YR" ,demo_H, seqn_freq_H, seqn_list_H))
 
-covariate_df <- covariate_df %>% mutate(houseFS = replace(houseFS, houseFS > 1, 2) - 1)
-covariate_df <- covariate_df %>% mutate(gender = gender - 1)
-covariate_df <- covariate_df %>% add_column(intercept = 1, .before = "gender")
-covariate_df <- covariate_df %>% mutate(poverty = floor(poverty) + 1)
+covariate_df_H <- covariate_df_H %>% mutate(houseFS = replace(houseFS, houseFS > 1, 2) - 1)
+covariate_df_H <- covariate_df_H %>% mutate(gender = gender - 1)
+covariate_df_H <- covariate_df_H %>% add_column(intercept = 1, .before = "gender")
+covariate_df_H <- covariate_df_H %>% mutate(poverty = floor(poverty) + 1)
 
-covariate_df$race[covariate_df$race==6] <- 5
-covariate_df$race[covariate_df$race==7] <- 6
+covariate_df_H$race[covariate_df_H$race==6] <- 5
+covariate_df_H$race[covariate_df_H$race==7] <- 6
 
-covariate_H <- covariate_df
-
-complete_inds_H <- complete.cases(covariate_H)
+complete_inds_H <- complete.cases(covariate_df_H)
 
 
-id_info <- acth_long_H[complete_inds_H,][,1:3]
+id_info_H <- acth_long_H[complete_inds_H,][,1:3]
 acth_long_H <- acth_long_H[complete_inds_H,][,4:1443]
 lux_long_H <- lux_long_H[complete_inds_H,][,4:1443]
-covariate_H <- covariate_H[complete_inds_H,]
+covariate_df_H <- covariate_df_H[complete_inds_H,]
 
 
 DownsampleInd <- function(long_data_ind, minutes = 15){
   down_samp_ind_mat <- matrix(as.numeric(long_data_ind), ncol = minutes, byrow = T)
-  #MEAN HERE NOT MEDIAN
-  return(apply(down_samp_ind_mat,1,mean, na.rm = T))
+  #MEAN OR MEDIAN HERE IS IMPORTANT
+  return(apply(down_samp_ind_mat,1,median, na.rm = T))
 }
 
 DownsampleConcatTranspose <- function(data_long,id_info){
@@ -152,19 +161,17 @@ DownsampleConcatTranspose <- function(data_long,id_info){
 }
 
   
-acth_down_H <- DownsampleConcatTranspose(acth_long_H,id_info)
-lux_down_H <- DownsampleConcatTranspose(lux_long_H,id_info)
+acth_down_H <- DownsampleConcatTranspose(acth_long_H,id_info_H)
+lux_down_H <- DownsampleConcatTranspose(lux_long_H,id_info_H)
 
-break
+covariate_df_H <- apply(covariate_df_H,2,as.numeric) 
+covariate_df_H <- cbind(covariate_df_H,id_info_H)
+covariate_df_H <- covariate_df_H %>% filter(PAXDAYM == 1)
+id_info_H <- covariate_df_H[4:7]
+covariate_df_H <- covariate_df_H[,1:3]
 
-covariate_H <- apply(covariate_H,2,as.numeric) 
-covariate_H <- cbind(covariate_H,id_info)
-covariate_H <- covariate_H %>% filter(PAXDAYM == 1)
-id_info_H <- covariate_H[4:7]
-covariate_H <- covariate_H[,1:3]
+wave_data_H <- list(acth_down_H,lux_down_H,covariate_df_H,id_info_H)
 
-wave_data <- list(acth_down_H,lux_down_H,covariate_H,id_info_H)
-
-save(wave_data,file = "WaveHdata.rda")
+save(wave_data_H,file = "Wavedata_H.rda")
 
 ```
