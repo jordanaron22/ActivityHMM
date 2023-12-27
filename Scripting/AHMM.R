@@ -2,15 +2,17 @@ set_seed <- T
 sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
 # sim_num <- 103
 
-real_data <- F
-# epsilon <- 1e-5
-epsilon <- 1e-100
+real_data <- T
+sim_covar <- F
+
+epsilon <- 1e-3
+# epsilon <- 1e-100
 lepsilon <- log(epsilon)
 
-sim_covar <- T
 
-wake_params <- c(2,3)
-sleep_params <- c(0,2)
+
+wake_params <- c(2.562106,.5992697)
+sleep_params <- c(-1.1387,1.9459)
 
 obs_per_day <- 96
 
@@ -21,7 +23,7 @@ print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",R
 
 
 if(is.na(RE_num)){RE_num <- 3}
-if(is.na(sim_size)){sim_size <- 3}
+if(is.na(sim_size)){sim_size <- 1}
 if(is.na(RE_type)){RE_type <- "mix1"}
 
 
@@ -874,8 +876,11 @@ CalcMeansWake <- function(act,weights_array){
     num <- 0
     denom <- 0
     for (ind in 1:n){
-      num <- num + (weights_array[,ind,re_index]) %*% act[,ind] 
-      denom <- denom + sum(weights_array[,ind,re_index])
+      act_ind0 <- act[,ind] 
+      inds_keep <- !is.na(act_ind0)
+      
+      num <- num + (weights_array[inds_keep,ind,re_index]) %*% act_ind0[inds_keep]
+      denom <- denom + sum(weights_array[inds_keep,ind,re_index])
     }
     mean_vec[re_index] <- num/denom
   }
@@ -892,32 +897,56 @@ CalcSigmaWake <- function(act,weights_array,mean_vec){
   for (re_index in 1:re_num){
     for (ind in 1:n){
       
-      num <- num + (weights_array[,ind,re_index]) %*% (act[,ind]-mean_vec[re_index])^2 
-      denom <- denom + sum(weights_array[,ind,re_index])
+      resid0 <- (act[,ind]-mean_vec[re_index])
+      inds_keep <- !is.na(resid0)
+      
+      num <- num + (weights_array[inds_keep,ind,re_index]) %*% (resid0[inds_keep]^2)
+      denom <- denom + sum(weights_array[inds_keep,ind,re_index])
     }
   }
   return(sqrt(num/(denom)))
 }
 
 
-CalcMeanSleep <- function(act,weights_mat){
+CalcMeanSleep <- function(act,weights_mat,lepsilon){
   n <- dim(weights_mat)[2]
   num <- 0
   denom <- 0
+  
+  leps_indicator <- (act==lepsilon)
+  leps_indicator[is.na(leps_indicator)] <- F
   for (ind in 1:n){
-    num <- num + (1-weights_mat[,ind]) %*% act[,ind] 
-    denom <- denom + sum(1-weights_mat[,ind])
+    
+    act_ind0 <- act[,ind] 
+    inds_keep <- !is.na(act_ind0)
+    
+    leps_ind <- leps_indicator[,ind]
+    inds_keep <- (inds_keep & !leps_ind)
+    
+    num <- num + (1-weights_mat[inds_keep,ind]) %*% act_ind0[inds_keep]
+    denom <- denom + sum(1-weights_mat[inds_keep,ind])
   }
   return(num/denom)
 }
 
-CalcSigmaSleep <- function(act,weights_mat,sleep_mean){
+CalcSigmaSleep <- function(act,weights_mat,sleep_mean, lepsilon){
   n <- dim(weights_mat)[2]
   num <- 0
   denom <- 0
+  
+  leps_indicator <- (act==lepsilon)
+  leps_indicator[is.na(leps_indicator)] <- F
+  
   for (ind in 1:n){
-    num <- num + (1-weights_mat[,ind]) %*% c(act[,ind] - sleep_mean)^2
-    denom <- denom + sum(1-weights_mat[,ind])
+    
+    resid0 <- c(act[,ind] - sleep_mean)
+    inds_keep <- !is.na(resid0)
+    
+    leps_ind <- leps_indicator[,ind]
+    inds_keep <- (inds_keep & !leps_ind)
+    
+    num <- num + (1-weights_mat[inds_keep,ind]) %*% resid0[inds_keep]^2
+    denom <- denom + sum(1-weights_mat[inds_keep,ind])
   }
   return(sqrt(num/denom))
 }
@@ -953,20 +982,25 @@ central_mean <- wake_params[1]
 var_factor <- RE_num %/% 2 * runif(1,.8,1.2)
 re_set <- seq(-2*var_factor,2*var_factor,length.out = RE_num) * runif(RE_num,.65,.85)
 
+pi_l_true <- rep(1/RE_num,RE_num)
+
 if (RE_num == 1){
   re_set <- c(0)
+} else if (RE_num == 3) {
+  re_set <- c(-0.4219073,0,0.3932991)
+  pi_l_true <- c(0.2350051,0.4432086,0.3217864)
 }
 
-pi_l_true <- rep(1/RE_num,RE_num)
+
 
 mean_set_true <- central_mean + re_set
 
 
-init_true <- c(.3,.7)
+init_true <- c(0.3347129,0.6652871)
 
 if (!sim_covar){
-  params_tran_true <- c(-3,.5,1,-1,-1,1,.9,-.8,
-                        -2.2,.3,.6,.6,-.6,-.6,-.75,.8)
+  params_tran_true <- c(-3.23,.05,.1,.07,.09,.09,1.17,.5,
+                        -2.69,.04,.08,.13,.15,.21,-1.26,-.58)
 } else{
   params_tran_true <- c(-3,.5,1,0,0,0,.9,-.8,
                         -2.2,.3,.6,0,0,0,-.75,.8)
@@ -989,8 +1023,8 @@ emit_act_true_sim <- emit_act_true[,,1]
 emit_act_true_sim[1,1] <- central_mean
 
 #Prob of being below detection limit
-# act_light_binom_true <- c(.05)
-act_light_binom_true <- c(0)
+act_light_binom_true <- c(.1)
+# act_light_binom_true <- c(0)
 
 #### Simulate True Data ####
 
@@ -1043,7 +1077,7 @@ if (!real_data){
   
   
   #CHECK MISSING AND CORRELATION BEFORE SIM
-  # act <- apply(act,2,InduceMissingVec, prob = .3)
+  act <- apply(act,2,InduceMissingVec, prob = .3)
 }
 
 #### Initialize starting parameters ####
@@ -1063,7 +1097,7 @@ emit_act[2,1,] <- emit_act[2,1,] + runif(1,-1/4,1/4)
 emit_act[2,2,] <- emit_act[2,2,] + runif(1,-1/2,1/2)
 
 # act_light_binom <- c(runif(1,0,.1))
-act_light_binom <- 0
+act_light_binom <- .1
 
 pi_l <- pi_l_true + runif(length(pi_l_true),0,.25)
 pi_l <- pi_l/sum(pi_l)
@@ -1093,6 +1127,7 @@ if(real_data){
   light <- t(light)[2:865,]
   
   day_length <- dim(act)[1]
+  num_of_people <- dim(act)[2]
   
   print("Loaded Data")
   
@@ -1101,8 +1136,8 @@ if(real_data){
   params_tran <- c(-3,.01,.01,.01,.01,.01,.01,.01,-2.2,.01,.01,.01,.01,.01,.01,.01)
   
   #need to fix this
-  emit_act <- matrix(c(4,2,
-                       0,2), byrow = T, 2)
+  # emit_act <- matrix(c(4,2,
+  #                      0,2), byrow = T, 2)
   
   act_light_binom <- c(.05)
 }
@@ -1117,11 +1152,11 @@ if(real_data){
 # act_light_binom <- act_light_binom_true_emp
 # pi_l <- pi_l_true_emp
 
-# init <- init_true
-# params_tran <- params_tran_true
-# emit_act <- emit_act_true
-# act_light_binom <- act_light_binom_true
-# pi_l <- pi_l_true
+init <- init_true
+params_tran <- params_tran_true
+emit_act <- emit_act_true
+act_light_binom <- act_light_binom_true
+pi_l <- pi_l_true
 
 tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
 
@@ -1172,26 +1207,32 @@ while(abs(like_diff) > 1e-3){
   tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
   
   
+  ################## Weights
+  #Weights are prob currently in the wake state
+  weights_array <- exp(CondMarginalize(alpha,beta,pi_l))
+  weights_mat <-rowSums(weights_array, dims = 2)
+  weights_vec <- as.vector(weights_mat)
+  
+  
   ################## Binom param (need to implement)
   act_vec <- as.vector(act)
   lod_act_weight <- as.numeric(act_vec==log(epsilon))
-  # act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(weights_vec[!is.na(as.vector(act))])
+  act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(1-weights_vec[!is.na(as.vector(act))])
+  # act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(weights_vec)
+  
 
   
   
   ################## Emission Dist Param
   
-  #Weights are prob currently in the wake state
-  weights_array <- exp(CondMarginalize(alpha,beta,pi_l))
-  weights_mat <-rowSums(weights_array, dims = 2)
   
   re_prob <- CalcProbRE(alpha,pi_l)
   pi_l <- colSums(re_prob)/num_of_people
   
   wake_means <- CalcMeansWake(act,weights_array)
   wake_sigma <- CalcSigmaWake(act,weights_array,wake_means)
-  sleep_mean <- CalcMeanSleep(act,weights_mat)[[1]]
-  sleep_sigma <- CalcSigmaSleep(act,weights_mat,sleep_mean)
+  sleep_mean <- CalcMeanSleep(act,weights_mat,lepsilon)[[1]]
+  sleep_sigma <- CalcSigmaSleep(act,weights_mat,sleep_mean,lepsilon)
   
   emit_act[1,1,] <- wake_means
   emit_act[1,2,] <- wake_sigma
@@ -1232,55 +1273,70 @@ print(paste("Sim Num:",sim_num,"RE Num:",RE_num,"Ending"))
 
 decoded_mat <- sapply(c(1:num_of_people), ViterbiInd)
 
-
-total_acc <- (sum(decoded_mat == 0 & mc ==0) + sum(decoded_mat == 1 & mc ==1))/(num_of_people*day_length)
-wake_acc <- sum(decoded_mat == 0 & mc ==0)/sum(mc ==0)
-sleep_acc <- sum(decoded_mat == 1 & mc ==1)/sum(mc ==1)
-
-perc_pred_wake <- sum(decoded_mat == 0 & mc ==0)/sum(decoded_mat ==0)
-perc_pred_sleep <- sum(decoded_mat == 1 & mc ==1)/sum(decoded_mat == 1) 
-
 starting_conditions <- list(wake_params,
-                           sleep_params,
-                           c(num_of_people,day_length),
-                           RE_type,
-                           RE_num,
-                           sim_num,
-                           time_vec)
+                            sleep_params,
+                            c(num_of_people,day_length),
+                            RE_type,
+                            RE_num,
+                            sim_num,
+                            time_vec)
 
-tran_df <- Tran2DF(params_tran) %>% 
-  mutate(truth = Tran2DF(params_tran_true)[,1]) %>% 
-  mutate(resid = prob - truth)
+if (!real_data){
+  total_acc <- (sum(decoded_mat == 0 & mc ==0) + sum(decoded_mat == 1 & mc ==1))/(num_of_people*day_length)
+  wake_acc <- sum(decoded_mat == 0 & mc ==0)/sum(mc ==0)
+  sleep_acc <- sum(decoded_mat == 1 & mc ==1)/sum(mc ==1)
+  
+  perc_pred_wake <- sum(decoded_mat == 0 & mc ==0)/sum(decoded_mat ==0)
+  perc_pred_sleep <- sum(decoded_mat == 1 & mc ==1)/sum(decoded_mat == 1) 
 
-Q1 <- function(x){return(quantile(x,probs = c(.01)))}
-Q10 <- function(x){return(quantile(x,probs = c(.1)))}
-Q25 <- function(x){return(quantile(x,probs = c(.25)))}
 
 
-Q75 <- function(x){return(quantile(x,probs = c(.75)))}
-Q90 <- function(x){return(quantile(x,probs = c(.9)))}
-Q99 <- function(x){return(quantile(x,probs = c(.99)))}
-
-tran_sum_df <- tran_df %>% group_by(type,race) %>% summarise(across(resid, 
-                                                                    list(min = min, Q1 = Q1, Q10 = Q10, Q25 = Q25, med = median,
-                                                                         Q75 = Q75, Q90 = Q90, Q99 = Q99, max = max)))
-
-tran_list <- list(tran_df,tran_sum_df)
+  tran_df <- Tran2DF(params_tran) %>% 
+    mutate(truth = Tran2DF(params_tran_true)[,1]) %>% 
+    mutate(resid = prob - truth)
+  
+  Q1 <- function(x){return(quantile(x,probs = c(.01)))}
+  Q10 <- function(x){return(quantile(x,probs = c(.1)))}
+  Q25 <- function(x){return(quantile(x,probs = c(.25)))}
+  
+  
+  Q75 <- function(x){return(quantile(x,probs = c(.75)))}
+  Q90 <- function(x){return(quantile(x,probs = c(.9)))}
+  Q99 <- function(x){return(quantile(x,probs = c(.99)))}
+  
+  tran_sum_df <- tran_df %>% group_by(type,race) %>% summarise(across(resid, 
+                                                                      list(min = min, Q1 = Q1, Q10 = Q10, Q25 = Q25, med = median,
+                                                                           Q75 = Q75, Q90 = Q90, Q99 = Q99, max = max)))
+  
+  tran_list <- list(tran_df,tran_sum_df)
+}
 
 if (!real_data){
   true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,pi_l_true_emp,clust_ind_true)
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
   mc_list <- list(mc,decoded_mat,total_acc,wake_acc,sleep_acc,perc_pred_wake,perc_pred_sleep)
   params_to_save <- list(true_params,est_params,likelihood_vec,mc_list,starting_conditions,tran_list)
+  
+  if(sim_size != 0){
+    save(params_to_save,file = paste0(RE_type,RE_num,"Size",sim_size,"Seed",sim_num,".rda"))
+  }
+  
 } else {
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l)
-  params_to_save <- list(est_params,likelihood_vec,decoded_mat,starting_conditions)
+  params_to_save <- list(est_params,likelihood_vec,decoded_mat,starting_conditions,Tran2DF(params_tran))
+  
+  save(params_to_save,file = paste0("MHMM",RE_num,".rda"))
 }
   
   
-if(sim_size != 0){
-  save(params_to_save,file = paste0(RE_type,RE_num,"Size",sim_size,"Seed",sim_num,".rda"))
-}
+
 
 
 #####################
+
+# readCpp("Scripting/cFunctions.cpp")
+# logClassificationC(current_state = 1,act_obs = act[,1],
+#                    mu = emit_act[2,1,1],sig = emit_act[2,2,1],
+#                    act_binom = act_light_binom,lod = lepsilon)
+# 
+# ForwardIndC(act[,190],init,tran_list,emit_act,1,act_light_binom,0,lepsilon)
