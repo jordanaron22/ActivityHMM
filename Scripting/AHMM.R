@@ -299,10 +299,10 @@ CalcInit <- function(alpha, beta,pi_l){
   for(ind in 1:length(alpha)){ 
     ind_like <- logSumExp(c(as.vector(t(t(alpha[[ind]][num_obs,,]) + log(pi_l)))))
     
-    init_0_vec <- c(init_0_vec, alpha[[ind]][time,1,] + beta[[ind]][time,1,] + log(pi_l) - ind_like)
+    init_0_vec <- c(init_0_vec, alpha[[ind]][time,1,] + beta[[ind]][time,1,] + log(pi_l) - ind_like + log_sweights_vec[ind])
     
     
-    init_1_vec <- c(init_1_vec, alpha[[ind]][time,2,] + beta[[ind]][time,2,] + log(pi_l) - ind_like)
+    init_1_vec <- c(init_1_vec, alpha[[ind]][time,2,] + beta[[ind]][time,2,] + log(pi_l) - ind_like + log_sweights_vec[ind])
   }
   
   
@@ -329,6 +329,7 @@ CalcLikelihood <- function(alpha,pi_l){
     ind_like <- logSumExp(c(SumOverREIndTime(alpha,pi_l,i,num_obs)))
     like_vec <- c(like_vec,ind_like)
   }
+  like_vec <- like_vec
   return(sum(like_vec))
   
 }
@@ -1049,6 +1050,8 @@ if (!real_data){
     num_of_people <- 1000 * 5
   }
   
+  log_sweights_vec <- numeric(num_of_people)
+  
   
   n <- day_length * num_of_people
   id <- data.frame(SEQN = c(1:num_of_people))
@@ -1109,6 +1112,7 @@ if(real_data){
   sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
   
   id <- wave_data[[4]]
+  log_sweights_vec <- log(id[,3])
   
   #CHANGE RACE AND POV
   covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$poverty))
@@ -1163,14 +1167,8 @@ tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = par
 time_vec <- c()
 
 
-id_mat <- apply(as.matrix(id$SEQN),2,RepCovarInd)
-
-act_cv.df <- data.frame(activity = as.vector(act),
-                        SEQN = id_mat)
-
-
 print("PRE ALPHA")
-alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
+alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon, log_sweights_vec)
 beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
 
 # apply(alpha[[2]][,,1]+beta[[2]][,,1],1,logSumExp)
@@ -1182,7 +1180,7 @@ like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
-while(abs(like_diff) > 1e-3){
+while(abs(like_diff) > 1e-3*1e-6){
   tic()
   start_time <- Sys.time()
   likelihood <- new_likelihood
@@ -1251,10 +1249,9 @@ while(abs(like_diff) > 1e-3){
     pi_l <- pi_l[reord_inds]
   }
   ##################
-  
 
 
-  alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
+  alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon,log_sweights_vec)
   beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
   
   new_likelihood <- CalcLikelihood(alpha,pi_l)

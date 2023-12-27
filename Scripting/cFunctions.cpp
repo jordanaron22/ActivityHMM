@@ -109,7 +109,7 @@ double logSumExpC(const arma::vec& x) {
 }
 
 // [[Rcpp::export]]
-mat ForwardIndC(const NumericVector& act_ind, NumericVector init, Rcpp::List tran_list, cube emit_act,int tran_ind, double act_light_binom, int clust_i, double lepsilon){
+mat ForwardIndC(const NumericVector& act_ind, NumericVector init, Rcpp::List tran_list, cube emit_act,int tran_ind, double act_light_binom, int clust_i, double lepsilon, double log_sweight){
 
 	mat alpha( act_ind.length(), 2 );
 
@@ -140,6 +140,7 @@ mat ForwardIndC(const NumericVector& act_ind, NumericVector init, Rcpp::List tra
 	  alpha(i,1) = logSumExpC(fp_1);
 	}
 
+	alpha = alpha + log_sweight;
 
 	return(alpha);
 }
@@ -176,7 +177,7 @@ mat BackwardIndC(const NumericVector& act_ind, Rcpp::List tran_list, cube emit_a
     
     beta(i,0) = logSumExpC(bp_0);
     beta(i,1) = logSumExpC(bp_1);
-    
+
   }
   
   return beta;
@@ -184,7 +185,7 @@ mat BackwardIndC(const NumericVector& act_ind, Rcpp::List tran_list, cube emit_a
 }
 
 // [[Rcpp::export]]
-List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube emit_act, NumericVector tran_ind_vec,double act_light_binom, double lepsilon){
+List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube emit_act, NumericVector tran_ind_vec,double act_light_binom, double lepsilon, NumericVector log_sweights_vec){
 	int num_people = act.ncol();
 	int len = act.nrow();
 	int num_re = emit_act.n_slices;
@@ -194,9 +195,11 @@ List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube
 		arma::cube Cube1(len, 2, num_re);
 		NumericVector act_ind = act.column(ind);
 		int tran_ind = tran_ind_vec(ind);
+		double log_sweight = log_sweights_vec(ind);
+
 		
 		for (int clust_i = 0; clust_i < num_re; clust_i++){
-			Cube1.slice(clust_i) = ForwardIndC(act_ind, init, tran_list, emit_act, tran_ind, act_light_binom, clust_i, lepsilon);
+			Cube1.slice(clust_i) = ForwardIndC(act_ind, init, tran_list, emit_act, tran_ind, act_light_binom, clust_i, lepsilon, log_sweight);
 
 		}
 
