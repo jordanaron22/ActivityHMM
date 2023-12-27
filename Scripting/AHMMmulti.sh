@@ -1,12 +1,11 @@
 #!/bin/bash -l
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --array=1-100
 #SBATCH --mail-type=NONE
 #SBATCH --mail-user=aron0064@umn.edu
 #SBATCH -A mfiecas
-#SBATCH -o /panfs/jay/groups/29/mfiecas/aron0064/ActHMM/LogFiles/%A_%a.out
-#SBATCH -e /panfs/jay/groups/29/mfiecas/aron0064/ActHMM/LogFiles/%A_%a.err
+#SBATCH -o /panfs/jay/groups/29/mfiecas/aron0064/ActHMM/LogFiles/%A.out
+#SBATCH -e /panfs/jay/groups/29/mfiecas/aron0064/ActHMM/LogFiles/%A.err
 RE_num=$1
 size=$2
 distribution=$3
