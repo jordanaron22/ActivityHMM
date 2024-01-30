@@ -15,8 +15,8 @@ library(reshape2)
 require(gridExtra)
 
 
-# load("Data/PAXPREDMG_long.rda")
-# pred_long_G <- long_data
+load("Data/PAXPREDMG_long.rda")
+pred_long_G <- long_data
 load("Data/PAXPREDMH_long.rda")
 pred_long_H <- long_data
 
@@ -24,32 +24,32 @@ pred_long_H <- long_data
 # load("Data/sleepmode_long.rda")
 # sleepmode_long <- as.data.frame(sleepmode_long)
 
-# load("Data/PAXMTSMG_long.rda")
-# acth_long_G <- long_data
+load("Data/PAXMTSMG_long.rda")
+acth_long_G <- long_data
 load("Data/PAXMTSMH_long.rda")
 acth_long_H <- long_data
 
-# load("Data/PAXLXMMG_long.rda")
-# lux_long_G <- long_data
+load("Data/PAXLXMMG_long.rda")
+lux_long_G <- long_data
 load("Data/PAXLXMMH_long.rda")
 lux_long_H <- long_data
 
-# load("Data/PAXQFMG_long.rda")
-# flag_long_G <- long_data
+load("Data/PAXQFMG_long.rda")
+flag_long_G <- long_data
 load("Data/PAXQFMH_long.rda")
 flag_long_H <- long_data
 
 # apply(long_data,2,as.numeric)
 
 #Set -.01 values to NA
-# acth_long_G[acth_long_G == -.01] <- NA
+acth_long_G[acth_long_G == -.01] <- NA
 acth_long_H[acth_long_H == -.01] <- NA
  
 
 #FIlter out flags
 
-# flag_long_G[,4:1443][flag_long_G[,4:1443] > 0 ] <- NA
-# acth_long_G[,4:1443] <- acth_long_G[,4:1443] + flag_long_G[,4:1443]
+flag_long_G[,4:1443][flag_long_G[,4:1443] > 0 ] <- NA
+acth_long_G[,4:1443] <- acth_long_G[,4:1443] + flag_long_G[,4:1443]
 flag_long_H[,4:1443][flag_long_H[,4:1443] > 0 ] <- NA
 acth_long_H[,4:1443] <- acth_long_H[,4:1443] + flag_long_H[,4:1443]
 
@@ -62,23 +62,23 @@ acth_long_H[,4:1443] <- acth_long_H[,4:1443] + flag_long_H[,4:1443]
 # nonwear_long[,3:1442] <- (pred_long[,3:1442] !=3)
 # nonwear_long[nonwear_long==F] <- NA
 
-# pred_long_G[,4:1443] <- (pred_long_G[,4:1443] !=3)
-# pred_long_G[is.na(pred_long_G)] <- F
+pred_long_G[,4:1443] <- (pred_long_G[,4:1443] !=3)
+pred_long_G[is.na(pred_long_G)] <- F
 pred_long_H[,4:1443] <- (pred_long_H[,4:1443] !=3)
 pred_long_H[is.na(pred_long_H)] <- F
 
 
-# acth_long_G[pred_long_G == F] <- NA
-# lux_long_G[pred_long_G == F] <- NA
+acth_long_G[pred_long_G == F] <- NA
+lux_long_G[pred_long_G == F] <- NA
 acth_long_H[pred_long_H == F] <- NA
 lux_long_H[pred_long_H == F] <- NA
 
 #Trims top .0001%
-# acth_long_G[,4:1443][acth_long_G[,4:1443] > quantile(acth_long_G[,4:1443], probs = .9999,na.rm = T)] <- NA
+acth_long_G[,4:1443][acth_long_G[,4:1443] > quantile(acth_long_G[,4:1443], probs = .9999,na.rm = T)] <- NA
 acth_long_H[,4:1443][acth_long_H[,4:1443] > quantile(acth_long_H[,4:1443], probs = .9999,na.rm = T)] <- NA
 #Doesnt actually remove any lux values
 #Max value of 2500, approx 300k times
-# lux_long_G[,4:1443][lux_long_G[,4:1443] > quantile(lux_long_G[,4:1443], probs = .9999,na.rm = T)] <- NA
+lux_long_G[,4:1443][lux_long_G[,4:1443] > quantile(lux_long_G[,4:1443], probs = .9999,na.rm = T)] <- NA
 lux_long_H[,4:1443][lux_long_H[,4:1443] > quantile(lux_long_H[,4:1443], probs = .9999,na.rm = T)] <- NA
 ```
 
@@ -94,17 +94,28 @@ AddVariable <- function(var_name,add_data, seqn_freq,seqn_list){
   var_col_ind <- which(colnames(add_data) == var_name)
   return(unlist(lapply(seqn_list, MatchSEQN, add_data,var_col_ind,seqn_freq,seqn_list)))
 }
- 
-# covariate_df <- data.frame(age = AddVariable("RIDAGEYR" ,demo, seqn_freq, seqn_list),
-#                            gender = AddVariable("RIAGENDR" ,demo, seqn_freq, seqn_list),
-#                            race = AddVariable("RIDRETH3" ,demo, seqn_freq, seqn_list),
-#                            ed1 = AddVariable("DMDEDUC3" ,demo, seqn_freq, seqn_list),
-#                            ed2 = AddVariable("DMDEDUC2" ,demo, seqn_freq, seqn_list),
-#                            income = AddVariable("INDHHIN2" ,demo, seqn_freq, seqn_list),
-#                            houseFS = AddVariable("FSDHH" ,food_sec, seqn_freq, seqn_list),
-#                            insurance = AddVariable("HIQ011" ,health_insurance, seqn_freq, seqn_list))
 
-#######################NEED TO DOWNLOAD FOR _G AND FIX CODE GOING FORWARD
+DownsampleInd <- function(long_data_ind, minutes = 15){
+  down_samp_ind_mat <- matrix(as.numeric(long_data_ind), ncol = minutes, byrow = T)
+  #MEAN OR MEDIAN HERE IS IMPORTANT
+  return(apply(down_samp_ind_mat,1,median, na.rm = T))
+}
+
+DownsampleConcatTranspose <- function(data_long,id_info){
+  
+  acth_down_H <- apply(data_long,1,DownsampleInd)
+  acth_down_full_H <- cbind(id_info,t(acth_down_H))
+  
+  acth_down_full_H <- acth_down_full_H %>% pivot_wider(id_cols = SEQN,names_from = PAXDAYM,
+                         values_from = colnames(acth_down_full_H)[4:99],
+                         names_glue = "{PAXDAYM}_{.value}",
+                         names_vary = "slowest")
+  
+  return(acth_down_full_H)
+}
+```
+
+```{r}
 
 seqn_freq_H <- table(acth_long_H$SEQN)
 seqn_list_H <- unique(acth_long_H$SEQN)
@@ -141,24 +152,7 @@ lux_long_H <- lux_long_H[complete_inds_H,][,4:1443]
 covariate_df_H <- covariate_df_H[complete_inds_H,]
 
 
-DownsampleInd <- function(long_data_ind, minutes = 15){
-  down_samp_ind_mat <- matrix(as.numeric(long_data_ind), ncol = minutes, byrow = T)
-  #MEAN OR MEDIAN HERE IS IMPORTANT
-  return(apply(down_samp_ind_mat,1,median, na.rm = T))
-}
 
-DownsampleConcatTranspose <- function(data_long,id_info){
-  
-  acth_down_H <- apply(data_long,1,DownsampleInd)
-  acth_down_full_H <- cbind(id_info,t(acth_down_H))
-  
-  acth_down_full_H <- acth_down_full_H %>% pivot_wider(id_cols = SEQN,names_from = PAXDAYM,
-                         values_from = colnames(acth_down_full_H)[4:99],
-                         names_glue = "{PAXDAYM}_{.value}",
-                         names_vary = "slowest")
-  
-  return(acth_down_full_H)
-}
 
   
 acth_down_H <- DownsampleConcatTranspose(acth_long_H,id_info_H)
@@ -173,5 +167,61 @@ covariate_df_H <- covariate_df_H[,1:3]
 wave_data_H <- list(acth_down_H,lux_down_H,covariate_df_H,id_info_H)
 
 save(wave_data_H,file = "Wavedata_H.rda")
+
+```
+
+
+```{r}
+
+seqn_freq_G <- table(acth_long_G$SEQN)
+seqn_list_G <- unique(acth_long_G$SEQN)
+demo_G <- read.xport("Raw Data/DEMO_G.XPT")
+health_insurance_G <- read.xport("Raw Data/HIQ_G.XPT")
+food_sec_G <- read.xport("Raw Data/FSQ_G.XPT")
+
+
+########
+#Weights for examination (so PAM)
+#To include weights for wave G and H just divide all weights by 2
+# demo$WTMEC2YR 
+
+covariate_df_G <- data.frame(gender = AddVariable("RIAGENDR" ,demo_G, seqn_freq_G, seqn_list_G),
+                           houseFS = AddVariable("FSDHH" ,food_sec_G, seqn_freq_G, seqn_list_G),
+                           race = AddVariable("RIDRETH3" ,demo_G, seqn_freq_G, seqn_list_G),
+                           poverty = AddVariable("INDFMPIR" ,demo_G, seqn_freq_G, seqn_list_G),
+                           sweights = AddVariable("WTMEC2YR" ,demo_G, seqn_freq_G, seqn_list_G))
+
+covariate_df_G <- covariate_df_G %>% mutate(houseFS = replace(houseFS, houseFS > 1, 2) - 1)
+covariate_df_G <- covariate_df_G %>% mutate(gender = gender - 1)
+covariate_df_G <- covariate_df_G %>% add_column(intercept = 1, .before = "gender")
+covariate_df_G <- covariate_df_G %>% mutate(poverty = floor(poverty) + 1)
+
+covariate_df_G$race[covariate_df_G$race==6] <- 5
+covariate_df_G$race[covariate_df_G$race==7] <- 6
+
+complete_inds_G <- complete.cases(covariate_df_G)
+
+
+id_info_G <- acth_long_G[complete_inds_G,][,1:3]
+acth_long_G <- acth_long_G[complete_inds_G,][,4:1443]
+lux_long_G <- lux_long_G[complete_inds_G,][,4:1443]
+covariate_df_G <- covariate_df_G[complete_inds_G,]
+
+
+
+
+  
+acth_down_G <- DownsampleConcatTranspose(acth_long_G,id_info_G)
+lux_down_G <- DownsampleConcatTranspose(lux_long_G,id_info_G)
+
+covariate_df_G <- apply(covariate_df_G,2,as.numeric) 
+covariate_df_G <- cbind(covariate_df_G,id_info_G)
+covariate_df_G <- covariate_df_G %>% filter(PAXDAYM == 1)
+id_info_G <- covariate_df_G[4:7]
+covariate_df_G <- covariate_df_G[,1:3]
+
+wave_data_G <- list(acth_down_G,lux_down_G,covariate_df_G,id_info_G)
+
+save(wave_data_G,file = "Wavedata_G.rda")
 
 ```

@@ -197,7 +197,7 @@ ParseSingleSim <- function(path){
 }
 
 
-path_size <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Old/mix1/Size2/"
+path_size <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Sims/norm/Size4/"
 SingleSim <- ParseSingleSim(path_size)  
 
 
@@ -304,7 +304,7 @@ BoxplotClust <- function(list_ind,inc_out = T){
   if (list_ind == 3){
     ylabel <- "Cluster Mean"
     xlabel <- ""
-    title <- "Cluster Mean and Mixing Proportion by # RE"
+    title <- "Cluster Mean and Mixing Proportion by Number of Support Points"
   }
   if (list_ind == 5){
     ylabel <- "Mixing Proportion"
@@ -490,6 +490,8 @@ SimBoxplot(SingleSim,6,2,0,F,"Likelihood Step Decreases")
 # g <- arrangeGrob(p1,p3,p4, nrow=3) #generates g
 # 
 # ggsave(file="REdist.png", g)
+
+ggsave(file="clustmeanmix.png", g)
 ```
 
 

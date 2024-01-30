@@ -1,0 +1,44 @@
+mkdir Size1 Size2 Size3 Size4
+mv *Size1*.rda Size1
+cd Size1
+mkdir c1 c2 c3 c4 c5 c6 
+mv *1Size1*.rda c1
+mv *2Size1*.rda c2
+mv *3Size1*.rda c3
+mv *4Size1*.rda c4
+mv *5Size1*.rda c5
+mv *6Size1*.rda c6
+cd ../
+
+mv *Size2*.rda Size2
+cd Size2
+mkdir c1 c2 c3 c4 c5 c6 
+mv *1Size2*.rda c1
+mv *2Size2*.rda c2
+mv *3Size2*.rda c3
+mv *4Size2*.rda c4
+mv *5Size2*.rda c5
+mv *6Size2*.rda c6
+cd ../
+
+mv *Size3*.rda Size3
+cd Size3
+mkdir c1 c2 c3 c4 c5 c6 
+mv *1Size3*.rda c1
+mv *2Size3*.rda c2
+mv *3Size3*.rda c3
+mv *4Size3*.rda c4
+mv *5Size3*.rda c5
+mv *6Size3*.rda c6
+cd ../
+
+mv *Size4*.rda Size4
+cd Size4
+mkdir c1 c2 c3 c4 c5 c6 
+mv *1Size4*.rda c1
+mv *2Size4*.rda c2
+mv *3Size4*.rda c3
+mv *4Size4*.rda c4
+mv *5Size4*.rda c5
+mv *6Size4*.rda c6
+cd ../

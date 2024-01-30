@@ -22,7 +22,7 @@ RE_type <- as.character(commandArgs(TRUE)[3])
 print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",RE_num))
 
 
-if(is.na(RE_num)){RE_num <- 3}
+if(is.na(RE_num)){RE_num <- 6}
 if(is.na(sim_size)){sim_size <- 1}
 if(is.na(RE_type)){RE_type <- "mix1"}
 
@@ -103,17 +103,17 @@ logClassification <- function(time,current_state,act,emit_act,act_light_binom,cl
     if (current_state == 0){
       lognorm_dens <- log(dnorm(act[time],mu_act,sig_act)) 
     } else {
-      lognorm_dens <- log(((1-act_light_binom[1]) * (act[time]!=log(epsilon)) * dnorm(act[time],mu_act,sig_act))+
-              (act_light_binom[1] * (act[time]==log(epsilon))))
+      lognorm_dens <- (log((1-act_light_binom[1]) * dnorm(act[time],mu_act,sig_act)) * (act[time]!=lepsilon))+
+              (log(act_light_binom[1]) * (act[time]==lepsilon))
     }
       
 
   } else {lognorm_dens <- 0}
     
 
-  if (lognorm_dens == -Inf){
-    lognorm_dens <- log(.Machine$double.xmin)
-  }
+  # if (lognorm_dens == -Inf){
+  #   lognorm_dens <- log(.Machine$double.xmin)
+  # }
   
   return(lognorm_dens)
 }
@@ -1107,12 +1107,21 @@ pi_l <- pi_l/sum(pi_l)
 
 #### Load in Real Data ####
 if(real_data){
-  load("WaveHdata.rda")
+  
+  load("Wavedata_G.rda")
+  load("Wavedata_H.rda")
   
   sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
   
-  id <- wave_data[[4]]
-  log_sweights_vec <- log(id[,3])
+  
+  id_G <- wave_data_G[[4]]
+  id_H <- wave_data_H[[4]]
+  id <- rbind(id_G,id_H)
+  
+  log_sweights_vec_G <- log(id_G[,3])
+  log_sweights_vec_H <- log(id_H[,3])
+  
+  log_sweights_vec <- c(log_sweights_vec_G/2,log_sweights_vec_H/2)
   
   #CHANGE RACE AND POV
   covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$poverty))
@@ -1123,12 +1132,18 @@ if(real_data){
   
   tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
   
-  act <- log(wave_data[[1]] + epsilon)
-  light <- log(wave_data[[2]] + epsilon)
+  act_G <- log(wave_data_G[[1]] + epsilon)
+  light_G <- log(wave_data_G[[2]] + epsilon)
+  act_H <- log(wave_data_H[[1]] + epsilon)
+  light_H <- log(wave_data_H[[2]] + epsilon)
   
   #remove SEQN identifier
-  act <- t(act)[2:865,]
-  light <- t(light)[2:865,]
+  act_G <- t(act_G)[2:865,]
+  light_G <- t(light_G)[2:865,]
+  act_H <- t(act_H)[2:865,]
+  light_H <- t(light_H)[2:865,]
+  
+  act <- cbind(act_G,act_H)
   
   day_length <- dim(act)[1]
   num_of_people <- dim(act)[2]
@@ -1165,8 +1180,7 @@ pi_l <- pi_l_true
 tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
 
 time_vec <- c()
-
-
+break
 print("PRE ALPHA")
 alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon, log_sweights_vec)
 beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
@@ -1180,7 +1194,7 @@ like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
-while(abs(like_diff) > 1e-3*1e-6){
+while(abs(like_diff) > 1e-3){
   tic()
   start_time <- Sys.time()
   likelihood <- new_likelihood
@@ -1325,9 +1339,6 @@ if (!real_data){
   save(params_to_save,file = paste0("MHMM",RE_num,".rda"))
 }
   
-  
-
-
 
 #####################
 
