@@ -5,8 +5,6 @@
 using namespace Rcpp; 
 using namespace arma;
 
-
-
 // [[Rcpp::export]]
 NumericVector vectorEqBool(NumericVector vec, double lod) {
 	NumericVector vecBool;
