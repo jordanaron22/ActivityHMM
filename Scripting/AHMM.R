@@ -23,8 +23,8 @@ print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",R
 
 
 if(is.na(RE_num)){RE_num <- 0}
-if(is.na(sim_size)){sim_size <- 0}
-if(is.na(RE_type)){RE_type <- "norm"}
+if(is.na(sim_size)){sim_size <- 1}
+if(is.na(RE_type)){RE_type <- "student"}
 
 
 #### Functions ####
@@ -198,26 +198,28 @@ BackwardInd <- function(act_ind, tran_list, emit_act,tran_ind,act_light_binom,cl
   
 }
 
-ForwardIndAll <- function(act,init,tran_ind_list,emit_act_array,act_light_binom_ind, lepsilon, log_sweights_vec){
+ForwardIndAll <- function(act,init,tran_list,emit_act_array,tran_ind_vec,act_light_binom_ind, lepsilon, log_sweights_vec){
   n <- dim(act)[2]
   fu <- dim(act)[1]
   alpha <- list()
   for (ind in 1:n){
+    tran_ind <- tran_ind_vec[ind]
     emit_ind <- array(emit_act_array[,,ind],dim = c(2,2,1))
-    alpha_ind <-ForwardIndC(act[,ind],init[ind,],list(tran_ind_list[[ind]]),emit_ind,1,act_light_binom_ind[ind],0,lepsilon,log_sweights_vec[ind])
+    alpha_ind <-ForwardIndC(act[,ind],init,tran_list,emit_ind,tran_ind,act_light_binom_ind[ind],0,lepsilon,log_sweights_vec[ind])
     alpha_ind <- array(alpha_ind,c(fu,2,1))
     alpha[[ind]] <- alpha_ind
   }
   return(alpha)
 }
 
-BackwardIndAll <- function(act, tran_ind_list, emit_act_array,act_light_binom_ind,lepsilon){
+BackwardIndAll <- function(act, tran_list, emit_act_array,tran_ind_vec,act_light_binom_ind,lepsilon){
   n <- dim(act)[2]
   fu <- dim(act)[1]
   beta <- list()
   for (ind in 1:n){
+    tran_ind <- tran_ind_vec[ind]
     emit_ind <- array(emit_act_array[,,ind],dim = c(2,2,1))
-    beta_ind <- BackwardIndC(act[,ind],list(tran_ind_list[[ind]]),emit_ind,1,act_light_binom_ind[ind],0,lepsilon)
+    beta_ind <- BackwardIndC(act[,ind],tran_list,emit_ind,tran_ind,act_light_binom_ind[ind],0,lepsilon)
     beta_ind <- array(beta_ind,c(fu,2,1))
     beta[[ind]] <- beta_ind
   }
@@ -227,16 +229,6 @@ BackwardIndAll <- function(act, tran_ind_list, emit_act_array,act_light_binom_in
 TranByTimeVec <- function(index, params_tran, time_vec){
   return(lapply(time_vec, Params2Tran, params_tran = params_tran,index=index))
 }
-
-
-# ForwardInd(act[,ind],init_mat[ind,],list(tran_ind_list[[ind]]),emit_ind,1,act_light_binom_ind[ind],1)
-# act_ind <- act[,ind]
-# init <- init_mat[ind,]
-# tran_list <- list(tran_ind_list[[ind]])
-# emit_act <- array(emit_act_array[,,ind],dim = c(2,2,1))
-# tran_ind <- 1
-# act_light_binom <- act_light_binom_ind[ind]
-# clust_i<- 1
 
 ForwardInd <- function(act_ind, init, tran_list, emit_act,tran_ind,act_light_binom,clust_i) {
   alpha <- matrix(0, ncol = 2, nrow=length(act_ind))
@@ -1137,13 +1129,12 @@ RepCovarInd <- function(covar_ind){return(t(replicate(day_length, covar_ind)))}
 
 ViterbiInd <- function(ind, RE_num){
   
+  params_tran_ind <- params_tran
   if (RE_num == 0){
     emit_ind <- array(emit_act_array[,,ind],dim = c(2,2,1))
-    params_tran_ind <- params_tran_mat[ind,]
     act_light_binom_working <- act_light_binom_ind[ind]
   } else {
     emit_ind <- emit_act
-    params_tran_ind <- params_tran
     act_light_binom_working <- act_light_binom
   }
   
@@ -1467,10 +1458,10 @@ if (!real_data){
     day_length <- 96 
     num_of_people <- 1000
   } else if (sim_size == 1){
-    day_length <- 96 * 2 
+    day_length <- 96 
     num_of_people <- 1000
   } else if (sim_size == 2){
-    day_length <- 96  * 2
+    day_length <- 96
     num_of_people <- 1000 * 5
   } else if (sim_size == 3){
     day_length <- 96 * 7  
@@ -1510,21 +1501,17 @@ if (!real_data){
   
   
   #CHECK MISSING AND CORRELATION BEFORE SIM
-  # act <- apply(act,2,InduceMissingVec, prob = .3)
-  act <- apply(act,2,InduceMissingVec, prob = 0)
+  act <- apply(act,2,InduceMissingVec, prob = .3)
+  # act <- apply(act,2,InduceMissingVec, prob = 0)
 }
 
 #### Initialize starting parameters ####
 init  <- c(runif(1,.1,.5),0)
 init[2] <- 1 - init[1]
-init_mat <- matrix(init,num_of_people,2,byrow = T)
 
 
 params_tran <- params_tran_true + runif(16,-.2,.2)
 if (sim_covar){params_tran[c(4:6,12:14)] <- 0} 
-if (RE_num == 0){params_tran[c(2,3,10,11)] <- 0}
-params_tran_mat <- matrix(params_tran,num_of_people,16,byrow = T)
-# params_tran_mat[,c(2,3,10,11)] <- 0
 
 
 emit_act <- emit_act_true
@@ -1608,23 +1595,24 @@ if(real_data){
 # act_light_binom <- act_light_binom_true_emp
 # pi_l <- pi_l_true_emp
 
-# init <- init_true
+init <- init_true
 params_tran <- params_tran_true
 emit_act <- emit_act_true
-# act_light_binom <- act_light_binom_true
-# pi_l <- pi_l_true
+act_light_binom <- act_light_binom_true
+act_light_binom_ind <- rep(act_light_binom, num_of_people)
+pi_l <- pi_l_true
 
 emit_act_array <- array(matrix(c(2,2,-1,2),2,2,byrow = T),dim=c(2,2,num_of_people))
 
 tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
-tran_ind_list <- TranIndList(params_tran_mat,obs_per_day,num_of_people)
+# tran_ind_list <- TranIndList(params_tran_mat,obs_per_day,num_of_people)
 
 time_vec <- c()
 
 print("PRE ALPHA")
 if (RE_num==0){
-  alpha <- ForwardIndAll(act,init_mat,tran_ind_list,emit_act_array,act_light_binom_ind,lepsilon, log_sweights_vec)
-  beta <- BackwardIndAll(act,tran_ind_list,emit_act_array,act_light_binom_ind,lepsilon)
+  alpha <- ForwardIndAll(act,init,tran_list,emit_act_array,tran_ind_vec,act_light_binom_ind,lepsilon, log_sweights_vec)
+  beta <- BackwardIndAll(act,tran_list,emit_act_array,tran_ind_vec,act_light_binom_ind,lepsilon)
 } else {
   alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon, log_sweights_vec)
   beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
@@ -1639,7 +1627,7 @@ like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
-while(abs(like_diff) > 1e-3){
+while(abs(like_diff) > 1e-3*1e-5){
 # for (i in 1:4){
   
   tic()
@@ -1649,18 +1637,18 @@ while(abs(like_diff) > 1e-3){
   
   
   ################## MC Parameters
+  
+  
+  # init <- CalcInit(alpha,beta,pi_l,T)
+  
   if (RE_num == 0){
-    # init_mat <- CalcInit(alpha,beta,pi_l,F)
-    params_tran <- CalcTranInd(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran,act_light_binom_ind,pi_l)
-    params_tran_mat <- matrix(params_tran,num_of_people,16,byrow = T)
-    
+    # params_tran <- CalcTranInd(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran,act_light_binom_ind,pi_l)
   } else {
-    init <- CalcInit(alpha,beta,pi_l,T)
     params_tran <- CalcTranC(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l)
   }
   
   tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
-  tran_ind_list <- TranIndList(params_tran_mat,obs_per_day,num_of_people)
+  # tran_ind_list <- TranIndList(params_tran_mat,obs_per_day,num_of_people)
   
   ################## Weights
   #Weights are prob currently in the wake state
@@ -1674,11 +1662,9 @@ while(abs(like_diff) > 1e-3){
   lod_act_weight <- as.numeric(act_vec==log(epsilon))
   
   
-  # act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(1-weights_vec[!is.na(as.vector(act))])
-  # # act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(weights_vec)
-  
-  # act_light_binom_ind <- colSums(act==lepsilon,na.rm = T)/colSums(1-weights_mat*!is.na(act),na.rm = T)
-  # act_light_binom_ind[act_light_binom_ind==0] <- .00001
+  act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(1-weights_vec[!is.na(as.vector(act))])
+  act_light_binom_ind <- colSums(act==lepsilon,na.rm = T)/colSums(1-weights_mat*!is.na(act),na.rm = T)
+  act_light_binom_ind[act_light_binom_ind==0] <- .00001
   # act_light_binom_ind[act_light_binom_ind>=1] <- .99999
 
   
@@ -1729,8 +1715,8 @@ while(abs(like_diff) > 1e-3){
 
 
   if (RE_num==0){
-    alpha <- ForwardIndAll(act,init_mat,tran_ind_list,emit_act_array,act_light_binom_ind,lepsilon, log_sweights_vec)
-    beta <- BackwardIndAll(act,tran_ind_list,emit_act_array,act_light_binom_ind,lepsilon)
+    alpha <- ForwardIndAll(act,init,tran_list,emit_act_array,tran_ind_vec,act_light_binom_ind,lepsilon, log_sweights_vec)
+    beta <- BackwardIndAll(act,tran_list,emit_act_array,tran_ind_vec,act_light_binom_ind,lepsilon)
   } else {
     alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon, log_sweights_vec)
     beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon)
@@ -1748,29 +1734,13 @@ while(abs(like_diff) > 1e-3){
 }
 
 if (RE_num == 0){
-  init <- apply(init_mat,2,mean)
   emit_act <- array(apply(emit_act_array,c(1,2),median),dim = c(2,2,1))
   act_light_binom <- median(act_light_binom_ind)
-  
-  
-  params_tran <- apply(params_tran_mat,2,median)
-  
-  # params_tran[1] <- median(params_tran_mat[(tran_ind_vec==1),1])
-  # params_tran[2] <- median(params_tran_mat[(tran_ind_vec==2),1]) - params_tran[1] 
-  # params_tran[3] <- median(params_tran_mat[(tran_ind_vec==3),1]) - params_tran[1] 
-  # 
-  # params_tran[9] <- median(params_tran_mat[(tran_ind_vec==1),9])
-  # params_tran[10] <- median(params_tran_mat[(tran_ind_vec==2),9]) - params_tran[9] 
-  # params_tran[11] <- median(params_tran_mat[(tran_ind_vec==3),9]) - params_tran[9] 
-  
 }
 
 print(paste("Sim Num:",sim_num,"RE Num:",RE_num,"Ending"))
 
 decoded_mat <- sapply(c(1:num_of_people), ViterbiInd, RE_num=RE_num)
-
-# for (i in 1:1000){x <- ViterbiInd(i,RE_num)}
-
 
 starting_conditions <- list(wake_params,
                             sleep_params,
