@@ -22,7 +22,7 @@ RE_type <- as.character(commandArgs(TRUE)[3])
 print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",RE_num))
 
 
-if(is.na(RE_num)){RE_num <- 0}
+if(is.na(RE_num)){RE_num <- 3}
 if(is.na(sim_size)){sim_size <- 1}
 if(is.na(RE_type)){RE_type <- "student"}
 
@@ -103,8 +103,12 @@ logClassification <- function(time,current_state,act,emit_act,act_light_binom,cl
     if (current_state == 0){
       lognorm_dens <- log(dnorm(act[time],mu_act,sig_act)) 
     } else {
-      lognorm_dens <- ((log(1-act_light_binom[1]) + dnorm(act[time],mu_act,sig_act,log = T)) * (act[time]!=lepsilon))+
-              (log(act_light_binom[1]) * (act[time]==lepsilon))
+      if (act[time]==lepsilon){
+        lognorm_dens <- log(1)
+      } else{
+        lognorm_dens <- dnorm(act[time],mu_act,sig_act,log = T)
+      }
+      
     }
       
 
@@ -1639,10 +1643,10 @@ while(abs(like_diff) > 1e-3*1e-5){
   ################## MC Parameters
   
   
-  # init <- CalcInit(alpha,beta,pi_l,T)
+  init <- CalcInit(alpha,beta,pi_l,T)
   
   if (RE_num == 0){
-    # params_tran <- CalcTranInd(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran,act_light_binom_ind,pi_l)
+    params_tran <- CalcTranInd(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran,act_light_binom_ind,pi_l)
   } else {
     params_tran <- CalcTranC(alpha,beta,act,params_tran,emit_act,covar_mat_tran,act_light_binom,pi_l)
   }
@@ -1665,7 +1669,7 @@ while(abs(like_diff) > 1e-3*1e-5){
   act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(1-weights_vec[!is.na(as.vector(act))])
   act_light_binom_ind <- colSums(act==lepsilon,na.rm = T)/colSums(1-weights_mat*!is.na(act),na.rm = T)
   act_light_binom_ind[act_light_binom_ind==0] <- .00001
-  # act_light_binom_ind[act_light_binom_ind>=1] <- .99999
+  act_light_binom_ind[act_light_binom_ind>=1] <- .99999
 
   
   
@@ -1695,11 +1699,11 @@ while(abs(like_diff) > 1e-3*1e-5){
     sleep_mean_ind <- CalcMeanSleep(act,weights_mat,lepsilon,F)
     sleep_sigma_ind <- CalcSigmaSleep(act,weights_mat,sleep_mean_ind,lepsilon,F)
     
-    # emit_act_array[1,1,] <- wake_means_ind
-    # emit_act_array[1,2,] <- wake_sigma_ind
-    # emit_act_array[2,1,] <- sleep_mean_ind
-    # emit_act_array[2,2,] <- sleep_sigma_ind
-    # # emit_act_array[,2,] <- abs(emit_act[,2,])
+    emit_act_array[1,1,] <- wake_means_ind
+    emit_act_array[1,2,] <- wake_sigma_ind
+    emit_act_array[2,1,] <- sleep_mean_ind
+    emit_act_array[2,2,] <- sleep_sigma_ind
+    # emit_act_array[,2,] <- abs(emit_act[,2,])
   }
   
   ##################

@@ -26,7 +26,7 @@ NumericVector logClassificationC(int current_state, NumericVector act_obs, doubl
 		temp = Rcpp::dnorm( act_obs, mu, sig, true );
 	} else {
 		NumericVector vec_eq = vectorEqBool(act_obs, lod);
-		temp = ((log(1-act_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_binom)*vec_eq);
+		temp = (Rcpp::dnorm( act_obs, mu, sig, true ) * (1 - vec_eq)) + (log(1)*vec_eq);
 		
 	}
 
@@ -50,7 +50,7 @@ vec logClassificationC2(int current_state, NumericVector act_obs, double mu, dou
     temp = Rcpp::dnorm( act_obs, mu, sig, true );
   } else {
     NumericVector vec_eq = vectorEqBool(act_obs, lod);
-    temp = ((log(1-act_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_binom)*vec_eq);
+    temp = (Rcpp::dnorm( act_obs, mu, sig, true ) * (1 - vec_eq)) + (log(1)*vec_eq);
   }
 
   LogicalVector nan_vec = is_na(act_obs);
