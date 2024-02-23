@@ -1,0 +1,23 @@
+\begin{thebibliography}{1}
+
+\bibitem{Altman2007}
+Rachel~MacKay Altman.
+\newblock Mixed hidden markov models.
+\newblock {\em Journal of the American Statistical Association}, 102(477):201--210, 2007.
+
+\bibitem{izenman1991}
+Alan~Julian Izenman.
+\newblock Review papers: Recent developments in nonparametric density estimation.
+\newblock {\em Journal of the american statistical association}, 86(413):205--224, 1991.
+
+\bibitem{Baum1970}
+Leonard~E. Baum, Ted Petrie, George Soules, and Norman Weiss.
+\newblock A maximization technique occurring in the statistical analysis of probabilistic functions of markov chains.
+\newblock {\em The Annals of Mathematical Statistics}, 41(1):164--171, 1970.
+
+\bibitem{Maruotti2011}
+Antonello Maruotti.
+\newblock Mixed hidden markov models for longitudinal data: An overview.
+\newblock {\em International Statistical Review / Revue Internationale de Statistique}, 79(3):427--454, 2011.
+
+\end{thebibliography}
