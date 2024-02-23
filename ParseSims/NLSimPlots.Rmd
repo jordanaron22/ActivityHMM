@@ -267,7 +267,7 @@ MultiSim <- ParseSims(path)
 # SingleType_MultiSize[[1]][[1]][[2]][[2]][,,57]
 # 
 # SingleSim <- MultiSim[[2]][[2]]
-clust_num <- 7
+clust_num <- 8
 dist_num <- length(MultiSim)
 final_df <- data.frame()
 
@@ -322,7 +322,10 @@ vit_df$`Accuracy Type` <- factor(vit_df$`Accuracy Type`, levels = c("Sleep Preci
 # vit_df <- vit_df %>% filter(.[[1]] != "Wake Precision" & .[[1]] != "Sleep Precision")
 ```
 
+
 ```{r}
+acc_df <- vit_df %>% filter(.[[1]] == "Total")
+acc_df <- acc_df[,-1]
 vit_df <- vit_df %>% filter(.[[1]] != "Total")
 
 vit_df <- vit_df %>% mutate(State = rep(c("Wake","Sleep"),dim(vit_df)[1]/2))
@@ -363,7 +366,7 @@ plot_data = nested_loop_base_data(
 p = nested_loop_base_plot(
     plot_data,
     x_name = "", 
-    y_name = "% Correctly Predicted",
+    y_name = "Rate",
     colors = viridis::viridis(11)[c(1,3:10)],
     legend_labels = c(0,1,2,3,4,5,6,7,8),
     connect_spus = T
@@ -406,9 +409,73 @@ p = add_processing(
 p + labs(color='Number of Support Points',title = "Sensitivity and Precision by Model, Sample Size, and RE Distribution") +
   guides(size = F, shape = F, linetype = F)
 
-# setwd("../Plots")
-# ggsave("NestedLoopAcc.png",width = 9,height = 9)
+setwd("../Plots")
+ggsave("NestedLoopSP.png",width = 9,height = 9)
 ```
+
+
+```{r,fig.height=9,fig.width=9}
+
+plot_data = nested_loop_base_data(
+    acc_df,
+    x = "xfiller", steps = c("Days of Follow-Up","Number of Participants","Distribution"),
+    # x = "xfiller", steps = c("Days of Follow-Up","Number of Participants"),
+    spu_x_shift = 2,
+    replace_labels = list("Days of Follow-Up" = c("96" = "1",
+                                        "672" = "7")
+                          ),
+)
+
+p = nested_loop_base_plot(
+    plot_data,
+    x_name = "", 
+    y_name = "Percent Correctly Predicted",
+    colors = viridis::viridis(11)[c(1,3:10)],
+    legend_labels = c(0,1,2,3,4,5,6,7,8),
+    connect_spus = T
+)
+
+plot_data = nested_loop_paramsteps_data(
+    plot_data,
+    steps_y_base = 0.7, steps_y_height = .025, steps_y_shift = .05
+)
+
+p = nested_loop_paramsteps_plot(
+    p, plot_data, 
+    steps_values_annotate = TRUE, 
+    steps_annotation_size = 2.5
+)
+
+p = add_processing(
+    p, 
+    list(
+        # set limits
+        adjust_ylim = list(
+            y_expand_add = c(-0.05, NULL)
+        ),
+        # adjust theme
+        add_custom_theme = list(
+            axis.text.x=element_blank(), 
+            axis.ticks.x=element_blank(),
+            legend.position = "top", 
+            panel.grid.major = element_line(
+              color = "grey65", size = 0.1
+            )
+        ), 
+        # add horizontal lines
+        add_abline = list(
+            intercept = 0
+        )
+    )
+)
+
+p + labs(color='Number of Support Points',title = "Total Accuracy by Model, Sample Size, and RE Distribution") +
+  guides(size = F, shape = F, linetype = F)
+
+# setwd("../Plots")
+# ggsave("NestedLoopAcc.png",width = 6,height = 5)
+```
+
 
 ```{r}
 dist_num <- length(MultiSim)
@@ -516,7 +583,7 @@ plot_data = nested_loop_base_data(
 p = nested_loop_base_plot(
     plot_data,
     x_name = "", 
-    y_name = "% Correctly Predicted",
+    y_name = "Median Residual",
     colors = viridis::viridis(11)[c(1,3:10)],
     legend_labels = c(0,1,2,3,4,5,6,7,8),
     connect_spus = T
