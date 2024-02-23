@@ -12,6 +12,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(ggplot2)
 library(cowplot)
+library(gridExtra)
+library(viridis)
 
 expit <- function(x){
   return(exp(x) / (1+exp(x)))
@@ -113,7 +115,6 @@ act_decode_list <- act_decode_list[-1]
 ```
 
 ```{r}
-setwd("..")
 load("Wavedata_G.rda")
 load("Wavedata_H.rda")
   
@@ -271,44 +272,177 @@ PlotScatter(act_est_array,2,2,"Sleep Activity SE by # of Support Points")
 
 act_decode_array <- simplify2array(act_decode_list)
 
-test2 <- apply(act_decode_array,c(1,2),var)
+# test2 <- apply(act_decode_array,c(1,2),var)
+# 
+# inds <- which(test2 == max(test2,na.rm = T), arr.ind = TRUE)
+# tail(sort(table(inds[,2])),20)
 
-inds <- which(test2 == max(test2,na.rm = T), arr.ind = TRUE)
-tail(sort(table(inds[,2])),20)
+re_ind <- 6
+
+init <- init_est_array[,re_ind]
+params_tran <- tran_est_array[,,re_ind]
+emit_act <- act_est_array[[re_ind]]
+act_light_binom <- binom_est_array[re_ind]
+pi_l <- pi_est_array[[re_ind]]
+
+tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
+tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
+
+readCpp("Scripting/cFunctions.cpp")
+
+alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon, log_sweights_vec)
+re_prob <- CalcProbRE(alpha,pi_l)
+
+sum(apply(re_prob,1, function(x) any(x > .5)))/dim(re_prob)[1]
+sum(apply(re_prob,1, function(x) any(x > .9)))/dim(re_prob)[1]
+sum(apply(re_prob,1, function(x) any(x > .99)))/dim(re_prob)[1]
+
+
+
+
+
+class1 <- which(re_prob[,1] == max(re_prob[,1] ,na.rm = T), arr.ind = TRUE)
+class2 <- which(re_prob[,2] == max(re_prob[,2] ,na.rm = T), arr.ind = TRUE)
+class3 <- which(re_prob[,3] == max(re_prob[,1] ,na.rm = T), arr.ind = TRUE)
+class6 <- which(re_prob[,6] == max(re_prob[,1] ,na.rm = T), arr.ind = TRUE)
 ```
 
-```{r,fig.height=7,fig.width=7}
+```{r,fig.height=4,fig.width=10}
+# # 
+# ind <- class1[4]
+# 
+# # ind <- class1[6]
+# # ind <- class1[10]
+# # ind <- class1[24]
+# # ind <- class1[25]
+# # ind <- class1[42]
+# # ind <- class1[48]
+# # ind <- class1[49]
+# 
+# ind <- class2[2]
+# 
+# # # ind <- class3[1]
+# ind <- class3[2]
+# # # ind <- class3[8]
+# 
+# # # ind <- class6[5]
+# ind <- class6[7]
+# # # ind <- class6[9]
 
-# ind <- 13324    
-# ind <- 1320       
-ind <- 6
-decoded_df <- data.frame(decode = as.vector(act_decode_array[,ind,]),
-                         supportpoints = rep(c(1,2,3,4,5,6),each = 864),
-                         lwd = rep(seq(1.2,1,length = 6),each = 864),
-                         act = rep(act[,ind],6),
-                         time =rep(c(seq(as.POSIXct("2024-01-01"), as.POSIXct("2024-01-10"), by=60*15)[1:864]),6))
+DecodingPlots <- function(ind){
+  decoded_df <- data.frame(decode = as.vector(act_decode_array[,ind,]),
+                           supportpoints = rep(c(1,2,3,4,5,6),each = 864),
+                           lwd = rep(seq(.5,.25,length = 6),each = 864),
+                           act = rep(act[,ind],6),
+                           time =rep(c(seq(as.POSIXct("2024-01-01"), as.POSIXct("2024-01-10"), by=60*15)[1:864]),6))
+  
+  decoded_df$supportpoints <- as.factor(decoded_df$supportpoints)
+  decoded_df$lwd <- as.factor(decoded_df$lwd)
+  
+  
+  # decoded_df <- decoded_df[97:768,]
+  decoded_df1 <- decoded_df[1:864,]
+  decoded_df6 <- decoded_df[4321:5184,]
+  # decoded_df <- decoded_df[c(1:864,4321:5184),]
+  
+  p <- ggplot(decoded_df, aes(x=time, y=decode), size =lwd) +
+    geom_line(aes(color = supportpoints,linetype = supportpoints)) +
+    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+                     date_labels="%H:%M")+
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) + 
+    scale_y_continuous(breaks=c(0,1), label = c("Wake","Sleep")) +
+    scale_color_viridis(discrete=TRUE,end=.95) + 
+    labs(x = "Time",
+         y="",
+         title = "Viterbi Decoding by # of Support Points",
+         linetype = "Support Points",
+         color = "Support Points")
+  
+  g <- ggplot(decoded_df, aes(x=time, y=act)) +
+    geom_point() +
+    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+                     date_labels="%H:%M")+
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) + 
+    labs(x = "Time",
+         y = "Acitivity (MIMS)",
+         title = "Activity by Time")
+  
+  p1 <- ggplot(decoded_df1, aes(x=time, y=decode)) +
+    geom_path(color = viridis(7)[1]) +
+    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+                     date_labels="%H:%M")+
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = .5, vjust = 0.5))+
+    theme(legend.position = "none") + 
+    scale_y_continuous(breaks=c(0,1), label = c("Wake","Sleep"))+
+    labs(x = "Time",
+         y="",
+         title = "Standard HMM",
+         linetype = "Support Points",
+         color = "Support Points")
+  
+  p6 <- ggplot(decoded_df6, aes(x=time, y=decode)) +
+    geom_path(color = viridis(7)[1]) +
+    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+                     date_labels="%H:%M")+
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = .5, vjust = 0.5))+
+    theme(legend.position = "none") + 
+    scale_y_continuous(breaks=c(0,1), label = c("Wake","Sleep"))+
+    labs(x = "Time",
+         y="",
+         title = "6 Support Points",
+         linetype = "Support Points",
+         color = "Support Points")
+  
+  
+  plot_list <- list()
+  plot_list[[1]] <- plot_grid(p,g,ncol=1, align = "hv",axis = "tblr")
+  plot_list[[2]] <- plot_grid(p1,p6, label_size = 10,ncol=1, align = "hv",axis = "tblr",hjust = -2,vjust = 4)
+  return(plot_list)
+}
 
-decoded_df$supportpoints <- as.factor(decoded_df$supportpoints)
-decoded_df$lwd <- as.factor(decoded_df$lwd)
+```
+
+```{r}
+#Cluster 1
+#Small diff btwn sleep and wake activity
+plot_list <- DecodingPlots(170)
+plot_list[[1]]
+plot_list[[2]]
+  
+
+#Cluster 2
+#Smallish diff btwn sleep and wake activity
+plot_list <- DecodingPlots(7)
+plot_list[[1]]
+plot_list[[2]]
+
+#Cluster 3
+#Medium diff btwn sleep and wake activity
+#Heavy sleeper
+plot_list <- DecodingPlots(1183)
+plot_list[[1]]
+plot_list[[2]]
 
 
-# decoded_df <- decoded_df[97:768,]
+#Cluster 6
+#Large diff btwn sleep and wake activity
+plot_list <- DecodingPlots(135)
+plot_list[[1]]
+plot_list[[2]]
 
-p <- ggplot(decoded_df, aes(x=time, y=decode)) +
-  geom_path(aes(color = supportpoints)) +
-  scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
-                   date_labels="%H:%M")+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 0.5))
+plot_list <- DecodingPlots(11)
+plot_list[[1]]
+plot_list[[2]]
 
-g <- ggplot(decoded_df, aes(x=time, y=act)) +
-  geom_point() +
-  scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
-                   date_labels="%H:%M")+
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 0.5))
 
-grid.arrange(p,g, ncol=1)
 
-plot_grid(p,g, labels = c('A', 'B'), label_size = 12,ncol=1, align = "hv",axis = "tblr")
+plot_list <- DecodingPlots(100)
+plot_list[[1]]
+plot_list[[2]]
 
 ```
 
