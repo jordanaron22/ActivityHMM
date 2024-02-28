@@ -15,6 +15,8 @@
     pdfpagemode=FullScreen,
 }
 
+\renewcommand{\includegraphics}[2][]{}
+
 \title{Practical Concerns for Estimating Mixed Hidden Markov Models}
 \author{}
 \date{}
@@ -27,128 +29,66 @@
 
 \section{Introduction}
 
-The circadian rhythm plays a major role in regulating human health. 
-Disruption of the wake/sleep cycle is associated with a variety of negative health outcomes. 
-For instance, the International Agency for Research on Cancer states that the chance of developing 
-certain types of cancers is greatly increased when the circadian rhythm is disturbed. 
-Sleep studies are the current gold standard to evaluate sleep, however they are resource 
-intensive and thus can only focus on small groups at a time. 
-Therefore, it is difficult to get population level data on the circadian rhythm. 
+The circadian rhythm plays a wide-ranging role in human health, from regulating important metabolomic pathways \cite{potterCircadianRhythmSleep2016} to immune response \cite{sharmaCircadianRhythmDisruption2016}. 
+Disruption of the circadian rhythm is associated with a variety of negative health outcomes. 
+For instance, sleep disruption related to shift work is most likely carcinogenic \cite{iarc2010}.
+Polysomnography (PSG) is the gold standard when evaluating certain sleep disorders, however PSG is both costly and inconvenient for the patient\cite{chervin1999}. 
+Requiring an overnight study at a specific heath care facility, there has been considerable interest in finding a cost-effective replacement.  As PSG is not readily available it is difficult to amass population level data. 
 
-The National Health Examination Survey (NHANES) is a collection 
-of studies aiming to quantify the health of US civilians. 
-Beginning in 1960, NHANES become a yearly study in 1999 where 
-specific goals change year-to-year to focus on emerging issues. 
-For two years in the mid 2010s, a representative sample for the 
-US of 5,000 participants (for a total of 10,000) were 
-given a wrist physical activity monitor (PAM) for 9 days. 
+The proliferation of personal physical activity monitors (PAM) offers an interesting insight into sleep health. 
+Actigraphy has proven to be useful in assessing circadian rhythm disorders \cite{morgenthaler2007} and has some distinct advantages over PSG. 
+PAMs collect a large amount of data over a longer period of time. As 
+they are relatively inexpensive, we can collect more data on more people compared to PSG.  
+Although this is an exciting opportunity, there are challenges. Actigraphy measures movement, not sleep. We can reconstruct the sleep cycle from actigraphy data, however we cannot measure the different stages nor the subjective experience of sleep. 
+In addition, constraints of wearable devices must also be considered \cite{imtiaz2021}, such as detection limit issues. 
+
+Although there is a clear connection between activity and sleep, the specific relationship is difficult to ascertain. 
+High activity periods most likely indicate an underlying wake state, however periods of inactivity may be hard to classify. 
+Activity data may look similar for sedentary wake activities and sleep (e.g. watching TV may appear similar sleeping). 
+During periods of very low activity, measurements may be below the limit of detection (LoD). 
+We propose to use an extension of a hidden Markov model (HMM) to capture this behavior. 
+The observed data will be the activity measurements from the PAM and the hidden Markov state will be the unobserved wake/sleep status.
+
+HMM Actigraphy PARA
+
+As physical activity is not uniform among people \cite{hootman2003}, any study utilizing population level actigraphy data must account for this. 
+Previously this issue has been handled by either extending the Markov state space from wake and sleep to high activity wake, low activity wake, and sleep or by estimating the emission parameters independently for each person. 
+In the first scenario, active people would spend a larger proportion of their wake time in the high activity wake state compared to the low activity wake state. 
+This solution may cause more problems than it solves as there is no agreed upon cut off for what constitutes low/high activity. 
+Additionally, this greatly increases the complexity of adding important covariates to the Markov transition matrix. 
+Estimating a 3x3 transition matrix is much more difficult than a 2x2, causing feasibility issues when large amounts of data are used. 
+For the second approach, although estimating the emission parameters independently allows a greater fit this too causes more issues than it solves. 
+As the number of participants increases so too does the number of parameters. 
+For datasets that do not have a large number of repeated measurements for each person this approach will not work. 
+Lastly, it is not clear how this can be extrapolated to new data without re-estimation. 
+Instead, we propose a mixed HMM (MHMM) \cite{Altman2007} with an individual level random effect for the activity data in the wake state. 
+This allows people to have different levels of activity while keeping the interpretable and computation friendly two state structure.
+We use a non-parametric approach to estimate this heterogeneity as there is little precedent on how activity is distributed across the US population and we did not want to assume any particular distribution.
+
+The National Health Examination Survey (NHANES) is a collection of studies aiming to quantify the health of US civilians. 
+Beginning in 1960, NHANES become a yearly study in 1999 where specific goals change year-to-year to focus on emerging issues. 
+For two years in the mid 2010s, a representative sample for the US of 5,000 participants (for a total of 10,000) were given a wrist physical activity monitor (PAM) for 9 days. 
 Among other metrics, these PAMs measured physical activity by the minute. 
 This data offers a unique glimpse into the circadian rhythm for the US population as a whole.
 
-The proliferation of personal PAMs offers an interesting insight into sleep health. 
-Currently, a lengthy and expensive sleep study is needed in order to quantify the circadian rhythm. 
-PAMs offer a possibility of gathering much larger amounts 
-of data easily, however the data may not be as accurate. 
-Although this is an exciting opportunity, there are two main challenges. 
+This project focuses on practical concerns for estimation of a MHMM, with a focus on guidelines for estimating MHMMs. 
+Specifically, we aim to answer whether a MHMM is necessary for state reconstruction, or if a HMM is sufficient. 
+If a MHMM is necessary, we discuss how many support points are needed for the nonparametric density estimation for the emission distribution random effect (RE). 
+Afterwards we apply a MHMM to the NHANES physical activity data.
 
-Firstly, PAMs measures activity not sleep. Although there is a clear 
-connection between the two, the specific relationship is not immediately apparent. 
-High activity periods most likely indicate an underlying wake state, 
-however periods of inactivity may be hard to classify. For example, 
-activity data may look similar for sedentary wake activities 
-and sleep (e.g. watching TV may appear similar sleeping). Additionally, 
-during periods of very low activity, measurements may be below the limit of detection (LoD). 
-We propose to use an extension of a hidden Markov model (HMM) to capture this behavior. 
-The observed data will be the activity measurements from the PAM 
-and the hidden Markov state will be the unobserved wake/sleep status.
-
-The second complication is that activity levels are heterogeneous across 
-the population. Previously this issue has been handled by either extending 
-the Markov state space from wake and sleep to high activity wake, low activity
- wake, and sleep or by estimating the emission parameters independently for 
- each person. In the first scenario, active people would spend a larger 
- proportion of their wake time in the high activity wake state compared to 
- the low activity wake state.  This solution may cause more problems than it 
- solves as there is no agreed upon cut off for what constitutes low/high activity. 
- Additionally, this greatly increases the complexity of adding important covariates 
- to the Markov transition matrix. Estimating a 3x3 transition matrix is much 
- more difficult than a 2x2, causing feasibility issues when large amounts of 
- data are used. For the second approach, although estimating the emission parameters 
- independently allows a greater fit this too causes more issues than it solves. 
- As the number of participants increases so too does the number of parameters. 
- For datasets that do not have a large number of repeated measurements for each 
- person this approach will not work. Lastly, it is not clear how this can be 
- extrapolated to new data without re-estimation. Instead we propose a mixed 
- HMM (MHMM) \cite{Altman2007} with an individual level random effect for the 
- activity data in the wake state. This allows people to have different levels 
- of activity while keeping the interpretable and computation friendly two state structure.
-
-This project focuses on practical concerns for estimation of a MHMM, with a 
-focus on guidelines for estimating MHMMs. Specifically, we aim to answer whether 
-a MHMM is necessary for state reconstruction, or if a HMM is sufficient. If a 
-MHMM is necessary, we discuss how many support points are needed for the nonparametric 
-density estimation for the emission distribution random effect (RE). Afterwards 
-we apply a MHMM to the NHANES physical activity data.
-
-\section{Methods}
+\section{Methods} \label{Methods}
 \subsection{Notation}
 
-Define the set $\{S_{i1}, ..., S_{iT}\}$ as the states of a first order Markov 
-chain (MC) corresponding to the wake/sleep cycle. If person i at time t is awake 
-we let $S_{it}=0$, otherwise if person i is asleep at time t then $S_{it}=1$. 
-To account for detection limit issues, let $\delta_{it}$ be 0 when the activity 
-measurement is below the LoD and person i is asleep, and 1 otherwise. Therefore, 
-we assume that when we observe a measurement below the LoD, the person must be in 
-the sleep state. As this is a first order MC, it can be completely described by 
-an initial probability, $P_j=P(S_{i1} =j)$, and a transition matrix where entry 
-ij is equal to $P_{ij}=P(S_{it}=j|S_{it-1}=i)$. Define the set $\{a_{i1}, ..., a_{iT}\}$ 
-as the observed physical activity data from a PAM for patient i. For person i 
-at time t, we refer to the probability of the activity measurement given the 
-current wake/sleep state as the emission distribution. The activity measurement 
-given the current wake/sleep status is independent of all other MC states, or 
-equivalently $P(a_{it}|S_{i1}, ..., S_{iT}) = P(a_{it}|S_{it})$. Therefore the 
-HMM can be completely described by the initial, transition, and emission probabilities.
+Define the set $\{S_{i1}, ..., S_{iT}\}$ as the states of a first order Markov chain (MC) corresponding to the sleep cycle. If person i at time t is awake then $S_{it}=0$, if person i is asleep at time t then $S_{it}=1$. To account for detection limit issues, let $\delta_{it}$ be 0 when the activity measurement is below the LoD at time t and person i is asleep, and 1 otherwise. We assume that when we observe a measurement below the LoD, the person must be in the sleep state. As this is a first order MC, it can be completely described by an initial probability, $P_j=P(S_{i1} =j)$, and a (possibly non-homogenous) transition array where entry kj is equal to $P_{kj}(it)=P(S_{it}=j|S_{it-1}=k)$. Define the set $\{a_{i1}, ..., a_{iT}\}$ as the observed physical activity data from a PAM for patient i. For person i at time t, we refer to the distribution of the activity measurement given the current wake/sleep state as the emission distribution. The activity measurement given the current sleep status is independent of all other MC states, or equivalently $P(a_{it}|S_{i1}, ..., S_{iT}) = P(a_{it}|S_{it})$. Therefore, the HMM can be completely described by the initial, transition, and emission probabilities.
 
-To allow for covariates in the transition probabilities, we model the probability
-of changing states with the inverse-logit or expit function. We have 
-$q(it)_{01} = \text{expit}(X_{it}\beta_0)$ and $q(it)_{10} = \text{expit}(X_{it}\beta_1)$ 
-where $X_{it}$ is a vector of covariates and $\beta_j$ is the corresponding covariate
-parameters. This allows both fixed (e.g. race) and time varying (e.g. current time) 
-covariates to influence the transition probabilities. In our simulation study we 
-let $\beta_j = \{\beta_{j0}, ..., \beta_{j4}\}$ and $X_{it} = \{1, x_{it1}, ..., x_{it4}\}$, 
-where $x_{it1}$ and $x_{it2}$ are fixed covariates equal to 1 if that covariate applies to 
-person i. $x_{it3} = \text{cos}(\frac{2\pi t}{96})$ and $x_{it4} = \text{sin}(\frac{2\pi t}{96})$ 
-are time varying to account for the cyclical nature of the circadian rhythm.  Any first 
-order harmonic function with a period of 96 can be estimated. A period of 96 was chosen 
-as this is equivalent to modeling each day in 15 minute chunks.
+To allow for covariates in the transition probabilities, we model the probability of changing states with the expit function. We have $P_{01}(it) = \text{expit}(X_{it}\beta_0)$ and $P_{10}(it) = \text{expit}(X_{it}\beta_1)$ where $X_{it}$ is a vector of covariates and $\beta_j$ is the corresponding vector of covariate parameters. This allows both fixed (e.g. race) and time varying (e.g. current time) covariates to influence the transition probabilities. In our simulation study we let $\beta_j = \{\beta_{j0}, ..., \beta_{j4}\}$ and $X_{it} = \{1, x_{it1}, ..., x_{it4}\}$, where $x_{it1}$ and $x_{it2}$ are fixed covariates equal to 1 if that covariate applies to person i. $x_{it3} = \text{cos}(\frac{2\pi t}{96})$ and $x_{it4} = \text{sin}(\frac{2\pi t}{96})$ vary by time to account for the cyclical nature of the circadian rhythm.  Any first order harmonic function with a period of 96 can be estimated. A period of 96 was chosen as this is equivalent to dividing one day into 15 minute intervals.
 
-We assume that the activity data given the underlying wake/sleep state is normally 
-distributed. When person i is asleep, we assume $a_{it}$ is drawn from a normal 
-distribution centered at $\mu_1$ with variance $\sigma_1^2$. When person i is awake, 
-we assume $a_{it}$ is drawn from a normal distribution centered at $\mu_0+u_i$ with 
-variance $\sigma_0^2$. $u_i$ is an old-style random effect directly related to the 
-mean wake activity of person i. We require that the distribution of $u_i$ (H) has 
-mean 0, but place no other restrictions on it. This assumption can be relaxed, however 
-it facilitates easy comparison between simulations later on. To be clear, we do not 
-necessarily assume that H is a normal distribution. There is little precedent on how 
-activity is distributed across the US population and we did not want to automatically 
-assume that it was normally distributed. Later on we will conduct a simulation study 
-where H is varied. By including a RE in the model, we use the term mixed HMM (MHMM) to describe this model. 
+We assume that the activity data given the underlying sleep state is normally distributed. When person i is asleep, we assume $a_{it}$ is drawn from a normal distribution centered at $\mu_1$ with variance $\sigma_1^2$. When person i is awake, we assume $a_{it}$ is drawn from a normal distribution centered at $\mu_0+u_i$ with variance $\sigma_0^2$. $u_i$ is an old-style random effect directly related to the mean wake activity of person i. We require that H, the distribution of $u_i$, has mean 0, but place no other restrictions on it. This assumption can be relaxed, however it facilitates easy comparison between simulations. To be clear, we do not necessarily assume that H is a normal distribution. In section \ref{SimStudy} we will conduct a simulation study where H is varied. We refer to the HMM with a RE in the emission distribution as a mixed HMM (MHMM).
 
 
 \subsection{Estimation}
 
-Without applying any additional methods, the likelihood is written
-as equation \ref{like1}. Inside of the square brackets, we evolve
-through the Markov chain for person i, multiplying the initial, 
-transition, and emission probabilities. As we do not know the 
-underlying MC state, it is not clear yet how to calculate these 
-probabilities as the wake/sleep states are not observed. As $u_i$ 
-is a continuous individual level random effect, we must integrate 
-over its support for each individual. This integral is complex 
-and and may require numerical methods to solve, increasing the 
-computation required. The next two subsections will detail how 
-to calculate this likelihood. 
+Without applying any additional techniques, the likelihood is written as equation \ref{like1}. Inside the square brackets, we evolve through the Markov chain for person i, multiplying the initial, transition, and emission probabilities. As we do not know the underlying MC state, it is not clear yet how to calculate these probabilities as the wake/sleep states are not observed. As $u_i$ is a continuous individual level random effect, we must integrate over its support for each individual. This integral is complex and requires numerical methods to solve. The next two subsections will detail how to calculate this likelihood. 
 
 \begin{equation}\label{like1}
 f(\textbf{a}|\theta) = \prod_{i=1}^n \int_U \sum_{{s_1}\cdots{s_T}} \biggr[ 
@@ -158,21 +98,7 @@ f(\textbf{a}|\theta) = \prod_{i=1}^n \int_U \sum_{{s_1}\cdots{s_T}} \biggr[
 
 \subsubsection{Nonparametric Density Estimation (NPDE)}
 
-To simplify the integral (as well as allowing future computations 
-with the forward-backward algorithm), we will estimate the RE 
-distribution, H, with a discrete random variable, $b_i$. A small 
-number of support points are chosen where the mass put on support 
-point l is $\pi_l$. This can equivalently be written as 
-$P(b_i = r_l) = \pi_l$ where $r_l$ is support point l. Later on 
-we will conduct a simulation study where the number of support 
-points ranges from one to six. Conceptually, this can be thought 
-of as estimating a discrete distribution using a histogram where 
-each bar of the histogram is a support point and the mass put on 
-each support point is the height of the bar. It is important to 
-note that using one support point is equivalent to leaving out 
-the RE and thus the MHMM reduces to a HMM. NPDE has been applied 
-with success numerous times in various applications \cite{izenman1991}. 
-Using this approach we can write the likelihood as follows: 
+To simplify the integral (as well as allowing future computations with the forward-backward algorithm), we will estimate the continuous RE distribution, H, with a discrete random variable, $b_i$. A small number of support points are chosen where the mass put on support point l is $\pi_l$. This can equivalently be written as $P(b_i = r_l) = \pi_l$ where $r_l$ is support point l. Conceptually, this can be thought of as estimating a discrete distribution using a histogram where each bar of the histogram is a support point and the mass put on each support point is the height of the bar. Using one support point is equivalent to leaving out the RE and thus the MHMM reduces to a HMM with shared emission parameters. Using NPDE we can write the likelihood as follows: 
 
 \begin{equation}\label{like2}
 f(\textbf{a}|\theta) = \prod_{i=1}^n \sum_{l=1}^L \sum_{{s_1}\cdots{s_T}} \biggr[ 
@@ -180,27 +106,11 @@ f(\textbf{a}|\theta) = \prod_{i=1}^n \sum_{l=1}^L \sum_{{s_1}\cdots{s_T}} \biggr
     \prod_{t=1}^T P(a_{it}|S_{it}=s_t,b_i=r_l)^{\delta_{it}} \biggr] \pi_l
 \end{equation}
 
-the change from equation \ref{like1} to \ref{like2} is that 
-the integral over the support of U becomes a sum over the number 
-of support points, L. Thus the time needed to compute this 
-likelihood scales linearly with L. Increasing L increases 
-estimation accuracy, however it comes at a computational price. 
-L must be chosen before estimation, and there are no clear 
-guidelines on how to do so. 
+where the integral over the support of U from equation \ref{like1} becomes a sum over the number of support points, L, in equation \ref{like2}. Thus, the time needed to compute this likelihood scales linearly with L. Increasing L increases estimation accuracy, however it comes at a computational price. L must be chosen before estimation, and there are no clear guidelines on how to do so. Following a simulation study in section \ref{SimStudy}, we will discuss how to choose the number of support points.
 
 \subsubsection{EM Algorithm}
 
-The EM algorithm is an iterative technique to preform maximum likelihood 
-estimation in the presence of latent variables \cite{Baum1970}. 
-Each iteration of the algorithm alternates between an expectation (E) 
-and maximization (M) step, where the likelihood is guaranteed to 
-increase between each iteration. Once the likelihood increase 
-between iterations become sufficiently small, we consider the 
-algorithm converged and stop. For the E step, we calculate the 
-expected value of the full data log likelihood conditional on the 
-observed data. We then maximize this expectation in the M step. The 
-complete data likelihood can be written down as if we knew the 
-latent variables that are required for estimation. It can be written as: 
+The EM algorithm is an iterative technique to preform maximum likelihood estimation in the presence of latent variables \cite{Baum1970}. Each iteration of the algorithm alternates between an expectation (E) and maximization (M) step, where the likelihood increases each iteration. Once this increase becomes sufficiently small, we consider the algorithm converged and stop. For the E step, we calculate the expected value of the full data log likelihood conditional on the observed data. We then maximize this expectation in the M step. The complete data likelihood is written down as if we knew the latent variables that are required for estimation. We have: 
 
 \begin{equation}\label{cdata}
 \begin{split}
@@ -214,20 +124,14 @@ latent variables that are required for estimation. It can be written as:
 \end{split}
 \end{equation}
 
-where I() is an indicator variable. We then take the expected 
-value of the log of equation \ref{cdata}, conditioning on the 
-observed data. The result is the expectation of the complete data 
-log likelihood. Letting $p_j = P(S_{i1}=j)$, $p_{kj} = P(S_{it}=j|S_{it-1}=k)$, 
-and $\pi_l = P(b_i=r_l)$ we can calculate the E step by calculating 
-equation \ref{ecdata} using a modified version of the forward-backward
- algorithm, detailed in the next section.
+where I() is an indicator variable equal to 1 of the inside expression is true and 0 otherwise. We then take the expected value of the log of equation \ref{cdata}, conditioning on the observed data. The result is the expectation of the complete data log likelihood. We can calculate the E step by calculating equation \ref{ecdata} using a modified version of the forward-backward algorithm, detailed in the next section.
 
 \begin{equation}\label{ecdata}
 \begin{split}
     \ell = E\big[\text{log f}(\textbf{a},\textbf{S}, \textbf{b} | \theta) | \textbf{a},\theta\big]  = 
-        & \sum_{i=1}^n\sum_{j=0}^1P(S_{i1}=j|\textbf{a})\text{log }p_j + \\
+        & \sum_{i=1}^n\sum_{j=0}^1P(S_{i1}=j|\textbf{a})\text{log }P_j + \\
     & \sum_{i=1}^n \sum^T_{t=2} \sum_{k=0}^1 \sum_{j=0}^1 
-        P(S_{it-1}=k,S_{it}=j|\textbf{a})\text{log }p_{kj} + \\ 
+        P(S_{it-1}=k,S_{it}=j|\textbf{a})\text{log }P_{kj}(it) + \\ 
     & \sum_{i=1}^n \sum_{l=1}^L \sum^T_{t=1}\sum_{j=0}^1 
         P(S_{it}=j,b_i=r_l|\textbf{a}) \delta_{it}\text{log}P(a_{t}|S_{it}=j, b_i=r_l) + \\
     &  \sum_{i=1}^n \sum_{l=1}^L P(b_i=r_l|\textbf{a}) \text{log }\pi_l 
@@ -235,15 +139,7 @@ equation \ref{ecdata} using a modified version of the forward-backward
 \end{equation}
 
 \subsubsection{Adapted forward-backward Algorithm}
-To account for the random effect in the emission distribution 
-we use a modified version of the forward-backward algorithm 
-that conditions on the discrete RE for person i \cite{Maruotti2011}. 
-The forward and backward quantities are calculated recursively as shown 
-in equations \ref{fwd} and \ref{bkwd}. Thus we have the following quantities: 
-$\alpha_{it}(j,r_l) = P(a_{i1}, ..., a_{it}, S_{it} = j | b_i=r_l)$ and 
-$\beta_{it}(j,r_l) =  P(a_{it+1}, ..., a_{iT} | S_{it} = j,b_i=r_l)$. 
-We can then calculate the required quantities for equations \ref{mu1} 
-and \ref{pi} as shown by equations \ref{probl} and \ref{probs0}.
+To account for the random effect in the emission distribution we use a modified version of the forward-backward algorithm that conditions on the discrete RE for person i \cite{Maruotti2011}. The forward and backward quantities are as follows: $\alpha_{it}(j,r_l) = P(a_{i1}, ..., a_{it}, S_{it} = j | b_i=r_l)$ and $\beta_{it}(j,r_l) =  P(a_{it+1}, ..., a_{iT} | S_{it} = j,b_i=r_l)$. Equations \ref{fwd} and \ref{bkwd} detail the recursive calculations. Equations \ref{proba}-\ref{probstran} can then be calculated, which are necessary for the M step.  
  
 \begin{equation} \label{fwd}
 \alpha_{it}(j,r_l) = \begin{cases}
@@ -308,18 +204,7 @@ and \ref{pi} as shown by equations \ref{probl} and \ref{probs0}.
 
 \subsubsection{Parameter Estimates}
 
- To maximize each parameter, we take the derivative with respect 
- to that parameter and set the derivative to 0. It is important 
- to note the modular nature of this method as the initial, 
- transition, emission, and mixing ($\pi_l$) probabilities can 
- be maximized independently. Using the previously described 
- adapted forward-backward algorithm, we can calculate equations 
- \ref{init}-\ref{pi}, which give closed form solutions for the 
- initial, emission, and mixing parameters. As we cannot observe 
- $\mu_0$ or $r_l$ individually, we cannot estimate either independently. 
- This does not pose an issue as the sum of the two quantities is 
- the necessary component for the model and can be estimated. We 
- will refer to $\nu_l$ as the cluster mean in future sections. 
+ To maximize each parameter, we set the derivative of the likelihood with respect to that parameter to 0 and solve. This approach has a modular nature as the initial, transition, emission, and mixing ($\pi_l$) probabilities can be maximized independently. Using the previously described adapted forward-backward algorithm, we can calculate equations closed form solutions for the initial, emission, and mixing parameters (equations \ref{init}-\ref{pi}). As we cannot observe $\mu_0$ or $r_l$ individually, we cannot estimate either independently. This does not pose an issue as the sum of the two quantities is the necessary component for the model and can be estimated. We will refer to $\nu_l$ as the cluster mean in future sections. 
 
 \begin{equation}\label{init}
     \hat{p_j}  = \frac{\sum^n_{i=0} P(S_{i1}=0|\textbf{a})}{n}
@@ -356,21 +241,17 @@ and \ref{pi} as shown by equations \ref{probl} and \ref{probs0}.
 \end{equation}
 
 
-Unlike the previous parameters, no closed form solution for 
-the transition probabilities exist. Instead, we preform a 
-single Newton-Raphson step on the derivative of the likelihood 
-at each iteration of the EM algorithm. Thus, 
-$\beta_{j}^* = \beta_{j} - (\frac{\partial^2\ell}{\partial \beta_{j}^2})^{-1}
-\frac{\partial\ell}{\partial \beta_{j}}$, where $\beta_{j}$ is 
-our current estimate and $\beta_{j}^*$ is our updated estimate. 
+Unlike the previous parameters, no closed form solution exists for the transition probabilities. Instead, we preform a single Newton-Raphson step at each iteration of the EM algorithm. Thus, $\beta_{j}^* = \beta_{j} - (\frac{\partial^2\ell}{\partial \beta_{j}^2})^{-1} \frac{\partial\ell}{\partial \beta_{j}}$, where $\beta_{j}$ is our current estimate and $\beta_{j}^*$ is our updated estimate. 
 
-\section{Simulation Study Results}
+\newpage
 
-As noted in the introduction, the goal of this paper is to 
-supply guidelines for MHMM estimation. Namely, do MHMMs provide 
-a substantial advantage compared to HMMs, and if so how many 
-support points are necessary for the NPDE of the RE distribution. 
-We have designed a simulation study to answer these questions.
+\section{Simulation Study Results}\label{SimStudy}
+
+As noted previously, there are no set of best practices for MHMM estimation.
+We conceived of this simulation study to test the following two questions. 
+Do MHMMs provide enough of an advantage to motivate their use compared to standard HMMs?
+Standard HMMs are often easier to implement due to available packages, however MHMMs may provide higher accuracy. When estimating a MHMM how many 
+support points are necessary for the NPDE of the RE distribution? 
 
 For the simulation study, we first simulate the sequence of MC 
 states corresponding to the wake/sleep state of person i at time 
@@ -384,9 +265,9 @@ and t with 3 degrees of freedom (figure \ref{REdist}). We then
 simulate the observed activity data where $a_{it} \sim N(2+u_i,3)$ 
 if person i is awake at time t and $a_{it} \sim N(0,2)$ if person i 
 is asleep at time t. The parameters of the MHMM were estimated, where 
-the number of support points was varied from 1 to 6. Finally we use 
-the Viterbi algorithm to construct the most likely sequence of 
-wake/sleep states given our estimated parameters. We can then compare 
+the number of support points was varied from 1 to 8. Finally we use 
+the Viterbi algorithm to construct the most likely sequence of the latent
+wake/sleep states given our estimated parameters. We then compare 
 the estimated sequence with the true wake/sleep sequence. All of this 
 was repeated 100 times for each combination (number of people, length 
 of observation, choice of H).
@@ -403,31 +284,28 @@ up over two plots to increase readability.}
 
 The top plot of figure \ref{REdist} shows the wake (without a RE) and 
 sleep activity distribution. Each individual's wake activity distribution 
-would be shifted to the right or left depending on if $u_i$ is positive 
-or negative. The bottom two plots show the different continuous RE 
+would be shifted to the right or left depending on $u_i$. The bottom two plots show the different continuous RE 
 distributions selected. The 5 choices for H have been split up into 
 two plots to increase readability.
 
-Figure \ref{NLacc} shows the results from the simulation. The y-axis 
-for this figure is the percent agreement between the estimated wake/sleep 
-sequence and the true wake sleep sequence. The color represents the 
-number of support points, where the dark purple is one support point 
-and the light green is 6. The x-axis represents the different simulation
-settings (days of follow up, number of participants, and RE distribution). 
-Taking the left most purple point, we can follow the line down and see 
+To determine the situations where a MHMM outperforms a standard HMM, we tested three different types of HMMs: (i) standard HMM where each person has their own mean wake activity parameter, (ii) standard HMM where there is a shared mean wake activity parameter, (iii) mixed HMM with 2-8 support points as described by section \ref{Methods}. (ii) is a special case of a MHMM and will be referred to as a MHMM with 1 support point. It should be noted that (i) is only possible if there are many measurements for each person and drastically increases the number of estimated parameters. The number of emission parameters for (ii) and (iii) is 3 + the number of support points, which ranges from 4-12 in this study. Looking at (i), the number of emission parameter is 3 + the number of individuals in the data, which ranges from 1,003 - 5,003
+
+Figure \ref{NLacc} shows the results from the simulation in a nested loop plot. The y-axis for this figure is the percent agreement between the estimated wake/sleep sequence and the true wake sleep sequence. 
+The color represents the type of HMM. 
+The x-axis represents the different simulation settings (days of follow up, number of participants, and RE distribution). 
+Taking the left most light green point, we can follow the line down and see 
 that the point represents the percent of the wake/sleep sequence 
-correctly predicted when the simulated data had 1 day of follow up, 1000 
-participants, and the continuous RE comes from a gamma distribution.
+correctly predicted with an 8 support point MHMM when the simulated data had 1 day of follow up, 1000 
+participants, and the continuous RE comes from a Gamma distribution.
+
+The individual mean activity HMM is extremely flexible and is able to capture minute differences in activity. However, it has a number of key drawbacks. A large number of repeated measurements are needed per person to estimate each mean parameter. It is not clear how prediction would work for a new person without re-estimating the entire model. Finally, the number of parameters scales with the number of people. Despite the much smaller number of parameters, a MHMM either preforms similarly or better than the individual mean activity HMM depending on the number of support points across all simulations. When the underling RE is Gamma or t-distributed (with 2 or 3 df) a MHMM with 8 support points has similar accuracy to the individual HMM. When the RE is Normally distributed the individual HMM is similar to a MHMM with 6 support points. Additionally, MHMMs do not face the same issues as the individual mean activity HMM. MHMMs do not require a large number of repeated measurements per person and are parsimonious in estimated parameters. MHMMs also naturally cluster the data and therefore are very interpretable when focussing on heterogeneity in a population. 
 
 As noted above, one support point is equivalent to leaving out the 
-random effect, which in turn simplifies the mixed HMM to a standard HMM. 
-As can be seen from figure \ref{NLacc}, as the purple line is the lowest, 
-one support points has the lowest accuracy. This indicates that we see 
-substantial accuracy gains from using a mixed HMM  (with any number 
-of support points) compared to a standard HMM when there truly is a 
-RE in the emissions distribution. We see that this accuracy increase 
+random effect, which in turn simplifies the MHMM to a standard HMM with a pooled mean activity parameter. 
+As can be seen from figure \ref{NLacc}, across all simulations the pooled parameter HMM has the lowest accuracy. Increasing the number of support points increases the accuracy where a MHMM with 8 support points is the most accurate across all simulations. The individual mean activity HMM preforms well, with an accuracy similar to a 5 or 8 support point MHMM, depending on the simulation. This indicates that we see substantial accuracy gains from using a mixed HMM  (with any number of support points) compared to a standard pooled HMM when there truly is a RE in the emission distribution. We see that this accuracy increase 
 is true for all simulation settings, meaning that the MHMM is more 
-accurate than the HMM for all combinations of sample size and underlying RE distribution.
+accurate than the pooled HMM for all combinations of sample size and underlying RE distribution. 
+ 
 
 \begin{figure}
 \includegraphics[scale=.8]{Support/NestedLoopAcc.png}
@@ -436,30 +314,10 @@ accurate than the HMM for all combinations of sample size and underlying RE dist
 \label{NLacc}
 \end{figure}
 
-Our next question was about the number of support points needed 
-for the NPDE of the RE. We see that this is mainly dependent upon 
-the underlying continuous RE distribution and not the sample size 
-in most situations. When H is gamma, two support points suffice. 
-When H is normal, three support points may be preferred to two, 
-but the returns diminish quickly after that. When H is a gamma/normal 
-mixture, four support points are needed. For the t distributions, 
-sample size plays a minor role as well. For a t distribution with 3 
-degrees of freedom the trade off between computation time and number 
-of support points needs to be evaluated as there are minimal, but present, 
-differences for two, three, and four support points. For the 1 day of 
-follow up with 5000 participants we see a large dip for two support points. 
-This occurs because when the number of people increases, it is more 
-likely that an extreme individual RE value is simulated. Thus one of
-the support points is more likely to be placed to account for extreme 
-values leaving only one support point to account for the remaining 
-activity measurements. When increasing to a total of three support 
-points, two can be used for the bulk and one for extreme values. 
-A similar trend can be seen for a t distribution with two degrees 
-of freedom, however, as the RE is even more spread out, more support 
-points are necessary. A t distribution with two degrees of freedom 
-may not be a realistic scenario, however figure \ref{NLacc} shows 
-that with only 6 support points we can accurately predict the wake/sleep
- cycle under more extreme conditions. 
+Now, we turn to the necessary number of support points needed 
+for the NPDE of the RE. This is mainly dependent upon 
+the underlying continuous RE distribution and not the sample size. There is a large increase in accuracy when the number of support points is increased from 1 to 2, with diminishing accuracy increases afterwards. Accuracy must be balanced with computational time as increasing the number of support points increases the running time. When H is gamma, two support points suffice. NEED TO EXPAND THIS
+
 
 \begin{figure}
 \includegraphics[scale=.65]{Support/NestedLoopSP.png}
@@ -475,15 +333,14 @@ for wake (top row) and sleep (bottom row). Each point is
 \label{NL2}
 \end{figure}
 
-To get a better understanding of how the method is working as a whole, 
-we can look at metrics that are more specific than overall accuracy. 
-Figure \ref{NL2} shows the sensitivity (left column) and precision 
+To get a better understanding of how the method is working we examine the sensitivity and positive predictive value (PPV). 
+Figure \ref{NL2} shows the sensitivity (left column) and PPV 
 (right column) for the wake (top row) and sleep (bottom row) states. 
 Recall that wake sensitivity is the percent of all truly wake states 
-that we accurately predict as wake, and wake precision is the percent 
-of predicted wake states that are truly wake (this may also be referred 
-to as the positive predictive value). When we fit a standard HMM 
-(one support point) we see that although the sleep sensitivity is high, 
+that we accurately predict as wake, and wake PPV is the percent 
+of predicted wake states that are truly wake. FEW SENTENCE ABOUT IND HMM
+
+When we fit a pooled HMM we see that although the sleep sensitivity is high, 
 the wake sensitivity is very low. This is because unless the activity 
 for time t is very high, the state at time t is predicted to be sleep. 
 Therefore we are classifying all low activity wake behavior as sleep. 
@@ -494,10 +351,10 @@ when we do we are most likely correct as we only predict wake if we
 see a high activity measure.
 
 When the number of support points is increased, the wake sensitivity 
-increases, while the sleep sensitivity decreases. This occurs as 
+increases, while the sleep sensitivity decreases slightly. This occurs as 
 although we are better at classifying sedentary wake activity as wake, 
 we also  missclassify some sleep activity as wake. This causes wake 
-precision to decrease and sleep precision to increase. Overall though, 
+precision to decrease and sleep precision to increase. Overall, 
 total accuracy is increased when the number of support points is increased 
 as we can better classify wake states when we observe low activity measurements.
 
@@ -593,6 +450,6 @@ combination of days follow-up, number of participants, and RE distribution.}
 
 
 \bibliographystyle{unsrt}
-\bibliography{Support/sample}
+\bibliography{Support/MHMMbib}
 
 \end{document}
