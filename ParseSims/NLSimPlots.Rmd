@@ -30,19 +30,22 @@ Param2TranHelper <- function(p12,p21){
   tran[2,2] <- 1 - tran[2,1]
   return(tran)
 }
-
+  
 Params2Tran <- function(params_tran,time,index){
-  param_matrix <- matrix(params_tran,ncol=8,nrow=2, byrow = F)
+  
+  harmonic_ind <- ((index*2)-1)+6
+  #####by row is different here
+  param_matrix <- matrix(params_tran,ncol=18,nrow=2, byrow = F)
   if (index == 1){
-    tran <- Param2TranHelper(param_matrix[1,1]+param_matrix[1,7]*cos(2*pi*time/96)+
-                               param_matrix[1,8]*sin(2*pi*time/96),
-                             param_matrix[2,1]+param_matrix[2,7]*cos(2*pi*time/96)+
-                               param_matrix[2,8]*sin(2*pi*time/96))
+    tran <- Param2TranHelper(param_matrix[1,1]+param_matrix[1,7]*cos(2*pi*time/96)+param_matrix[1,8]*sin(2*pi*time/96),
+                             param_matrix[2,1]+param_matrix[2,7]*cos(2*pi*time/96)+param_matrix[2,8]*sin(2*pi*time/96))
   } else {
-    tran <- Param2TranHelper(param_matrix[1,1]+param_matrix[1,index]+param_matrix[1,7]*cos(2*pi*time/96)+
-                               param_matrix[1,8]*sin(2*pi*time/96),
-                             param_matrix[2,1]+param_matrix[2,index]+param_matrix[2,7]*cos(2*pi*time/96)+
-                               param_matrix[2,8]*sin(2*pi*time/96))
+    tran <- Param2TranHelper(param_matrix[1,1]+param_matrix[1,index]+
+                               (param_matrix[1,7]+param_matrix[1,harmonic_ind])*cos(2*pi*time/96)+
+                               (param_matrix[1,8]+param_matrix[1,harmonic_ind+1])*sin(2*pi*time/96),
+                             param_matrix[2,1]+param_matrix[2,index]+
+                               (param_matrix[2,7]+param_matrix[2,harmonic_ind])*cos(2*pi*time/96)+
+                               (param_matrix[2,8]+param_matrix[2,harmonic_ind+1])*sin(2*pi*time/96))
   }
   return(tran)
 }
@@ -52,7 +55,6 @@ tran_covar_num <- 3
 
 Tran2DF <- function(params_tran){
   race_list <- c("0","1","2","3","4","5") 
-  
   
   tran_vec <- sapply(c(1:96),FUN = Params2Tran,params_tran = params_tran,index=1)
   tran_df <- data.frame(prob = c(tran_vec[3,],tran_vec[2,]),
@@ -77,7 +79,7 @@ Tran2DF <- function(params_tran){
 ParseSingleClust <- function(folder, path_size ){
   setwd(path_size)
   setwd(folder)
-  # setwd("/Users/aronjr/Documents/Predoc/ActivityHMM/ParseSims/Sims/Stud3nt/Size4/c4")
+  # setwd("Size1/c8/")
   
 
   file_list <- list.files()
@@ -93,8 +95,8 @@ ParseSingleClust <- function(folder, path_size ){
   init_true_array <- matrix(0,2,length(file_list))
   init_est_array <- matrix(0,2,length(file_list))
   
-  param_tran_true_array <- array(0,dim = c(2,8,length(file_list)))
-  param_tran_est_array <- array(0,dim = c(2,8,length(file_list)))
+  param_tran_true_array <- array(0,dim = c(2,18,length(file_list)))
+  param_tran_est_array <- array(0,dim = c(2,18,length(file_list)))
   
   # light_true_array <- array(0,dim = c(2,2,length(file_list)))
   # light_est_array <- array(0,dim = c(2,2,length(file_list)))
@@ -122,14 +124,17 @@ ParseSingleClust <- function(folder, path_size ){
   # tran_df_array <- array(0,dim = c(dim(params_to_save[[6]][[2]])[1],
   #                                  dim(params_to_save[[6]][[2]])[2],length(file_list)))
   
+  
+  nap_array <- matrix(0,1,length(file_list))
+  
   for (file_ind in 1:length(file_list)){
     load(file_list[file_ind])
     
     init_true_array[,file_ind] <- params_to_save[[1]][[1]]
     init_est_array[,file_ind] <- params_to_save[[2]][[1]]
     
-    param_tran_true_array[,,file_ind] <- params_to_save[[1]][[2]][c(1,9,2,10,3,11,4,12,5,13,6,14,7,15,8,16)]
-    param_tran_est_array[,,file_ind] <- params_to_save[[2]][[2]][c(1,9,2,10,3,11,4,12,5,13,6,14,7,15,8,16)]
+    param_tran_true_array[,,file_ind] <- matrix(params_to_save[[1]][[2]],2,18,byrow = T) 
+    param_tran_est_array[,,file_ind] <- matrix(params_to_save[[2]][[2]],2,18,byrow = T) 
     
     # light_true_array[,,file_ind] <- params_to_save[[1]][[3]]
     # light_est_array[,,file_ind] <- params_to_save[[2]][[3]]
@@ -164,6 +169,9 @@ ParseSingleClust <- function(folder, path_size ){
     
     # tran_df_array[,,file_ind] <- params_to_save[[6]][[2]]
     
+    
+    nap_array[file_ind] <- sum(params_to_save[[7]])
+    
   }
   
   act_true_array[1,1,,] <- 0
@@ -197,7 +205,8 @@ ParseSingleClust <- function(folder, path_size ){
               num_re,
               vit_array,
               init_cond,
-              time_array))
+              time_array,
+              nap_array))
   
   setwd("..")
 }
@@ -249,8 +258,10 @@ path_type <- "/Users/aronjr/Documents/Predoc/ActivityHMM/ParseSims/Sims/Stud3nt/
 # SingleType_MultiSize <- ParseSingleTypeMultiSize(path_type)
 
 
-path <- "/Users/aronjr/Documents/Predoc/ActivityHMM/ParseSims/Sims"
+path <- "/Users/aronjr/Documents/Predoc/ActivityHMM/ParseSims/Sim/"
 MultiSim <- ParseSims(path)
+
+
 
 ```
 
@@ -282,7 +293,7 @@ for (dist_ind in 1:dist_num){
       dist <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[4]]
       
       working_df <- data.frame(estimates = vit_med,
-                             accType = c("Total","Wake Sensitivity","Sleep Sensitivity","Wake Precision","Sleep Precision"),
+                             accType = c("Total","Wake Sensitivity","Sleep Sensitivity","Wake PPV","Sleep PPV"),
                              numberRE = nRE,
                              numObs = nobs,
                              lenObs = lobs,
@@ -311,15 +322,17 @@ vit_df <- vit_df %>% mutate(Distribution = case_when(Distribution == "gamma" ~ "
                                                      Distribution == "norm" ~ "Normal",
                                                      Distribution == "student" ~ "t(df=2)",
                                                      Distribution == "mix1" ~ "Mixture1",
-                                                     Distribution == "stud3nt" ~ "t(df=3)"))
+                                                     Distribution == "mix2" ~ "Mixture2",
+                                                     Distribution == "stud3nt" ~ "t(df=3)",
+                                                     Distribution == "unif" ~ "Uniform"))
 
 
-vit_df$Distribution <- factor(vit_df$Distribution, levels = c("Gamma", "Normal", "Mixture1","t(df=3)","t(df=2)"))
-vit_df$`Accuracy Type` <- factor(vit_df$`Accuracy Type`, levels = c("Sleep Precision","Sleep Sensitivity","Total","Wake Sensitivity","Wake Precision"))
+vit_df$Distribution <- factor(vit_df$Distribution, levels = c("Gamma", "Normal","Uniform", "Mixture1","Mixture2","t(df=3)","t(df=2)"))
+vit_df$`Accuracy Type` <- factor(vit_df$`Accuracy Type`, levels = c("Sleep PPV","Sleep Sensitivity","Total","Wake Sensitivity","Wake PPV"))
 
 #Only focus on sensitivity 
-#Comment out this line for results on precision too
-# vit_df <- vit_df %>% filter(.[[1]] != "Wake Precision" & .[[1]] != "Sleep Precision")
+#Comment out this line for results on PPV too
+# vit_df <- vit_df %>% filter(.[[1]] != "Wake PPV" & .[[1]] != "Sleep PPV")
 ```
 
 
@@ -329,22 +342,22 @@ acc_df <- acc_df[,-1]
 vit_df <- vit_df %>% filter(.[[1]] != "Total")
 
 vit_df <- vit_df %>% mutate(State = rep(c("Wake","Sleep"),dim(vit_df)[1]/2))
-vit_df <- vit_df %>% mutate(Type = rep(c("Sensitivity","Sensitivity","Precision","Precision"),dim(vit_df)[1]/4))
+vit_df <- vit_df %>% mutate(Type = rep(c("Sensitivity","Sensitivity","PPV","PPV"),dim(vit_df)[1]/4))
 vit_df <- vit_df[,-1]
 
 vit_df$State <- factor(vit_df$State, levels = c("Wake", "Sleep"))
-vit_df$Type <- factor(vit_df$Type, levels = c("Sensitivity", "Precision"))
+vit_df$Type <- factor(vit_df$Type, levels = c("Sensitivity", "PPV"))
 ```
 
 
 ```{r,fig.height=9,fig.width=9}
 
-# vit_df <- vit_df[,-2]
+# vit_df <- vit_df[,c(-1,-2)]
 
 
 # plot_data = nested_loop_base_data(
 #     vit_df,
-#     x = "xfiller", steps = c("Number of Participants","Distribution"),
+#     x = "xfiller", steps = c("Distribution"),
 #     # x = "xfiller", steps = c("Days of Follow-Up","Number of Participants"),
 #     grid_cols = c("Type"),
 #     grid_rows = c("State"),
@@ -368,13 +381,18 @@ p = nested_loop_base_plot(
     x_name = "", 
     y_name = "Rate",
     colors = viridis::viridis(11)[c(1,3:10)],
-    legend_labels = c(0,1,2,3,4,5,6,7,8),
+    shapes = c(17,15,16,16,16,16,16,16,16),
+    sizes = c(2,1,1,1,1,1,1,1,1),
+    legend_labels = c("Individual Emission HMM",
+                      "Shared Emission HMM","MHMM2","MHMM3",
+                      "MHMM4","MHMM5","MHMM6",
+                      "MHMM7","MHMM8"),
     connect_spus = T
 )
 
 plot_data = nested_loop_paramsteps_data(
     plot_data,
-    steps_y_base = 0.525, steps_y_height = .025, steps_y_shift = .05
+    steps_y_base = 0.25, steps_y_height = .025, steps_y_shift = .05
 )
 
 p = nested_loop_paramsteps_plot(
@@ -406,15 +424,18 @@ p = add_processing(
     )
 )
 
-p + labs(color='Number of Support Points',title = "Sensitivity and Precision by Model, Sample Size, and RE Distribution") +
-  guides(size = F, shape = F, linetype = F)
+p + labs(title = "Sensitivity and PPV by Model, Sample Size, and RE Distribution") 
 
-setwd("../Plots")
-ggsave("NestedLoopSP.png",width = 9,height = 9)
+#+ guides(size = F, shape = F, linetype = F)
+
+# setwd("../Plots")
+# ggsave("NestedLoopSP.png",width = 9,height = 9)
 ```
 
 
 ```{r,fig.height=9,fig.width=9}
+
+# acc_df <- acc_df[,c(-1,-2)]
 
 plot_data = nested_loop_base_data(
     acc_df,
@@ -426,18 +447,30 @@ plot_data = nested_loop_base_data(
                           ),
 )
 
+# plot_data = nested_loop_base_data(
+#     acc_df,
+#     x = "xfiller", steps = c("Distribution"),
+#     # x = "xfiller", steps = c("Days of Follow-Up","Number of Participants"),
+#     spu_x_shift = 2
+# )
+
 p = nested_loop_base_plot(
     plot_data,
     x_name = "", 
-    y_name = "Percent Correctly Predicted",
+    y_name = "Rate",
     colors = viridis::viridis(11)[c(1,3:10)],
-    legend_labels = c(0,1,2,3,4,5,6,7,8),
+    shapes = c(17,15,16,16,16,16,16,16,16),
+    sizes = c(2,1,1,1,1,1,1,1,1),
+    legend_labels = c("Individual Emission HMM",
+                      "Shared Emission HMM","MHMM2","MHMM3",
+                      "MHMM4","MHMM5","MHMM6",
+                      "MHMM7","MHMM8"),
     connect_spus = T
 )
 
 plot_data = nested_loop_paramsteps_data(
     plot_data,
-    steps_y_base = 0.7, steps_y_height = .025, steps_y_shift = .05
+    steps_y_base = 0.45, steps_y_height = .025, steps_y_shift = .05
 )
 
 p = nested_loop_paramsteps_plot(
@@ -469,8 +502,7 @@ p = add_processing(
     )
 )
 
-p + labs(color='Number of Support Points',title = "Total Accuracy by Model, Sample Size, and RE Distribution") +
-  guides(size = F, shape = F, linetype = F)
+p + labs(title = "Total Accuracy by Model, Sample Size, and RE Distribution") 
 
 # setwd("../Plots")
 # ggsave("NestedLoopAcc.png",width = 6,height = 5)
@@ -537,14 +569,17 @@ colnames(tran_resid_df)[3] <- "Number of Participants"
 colnames(tran_resid_df)[4] <- "Days of Follow-Up"
 colnames(tran_resid_df)[5] <- "Distribution"
 
+
 tran_resid_df <- tran_resid_df %>% mutate(Distribution = case_when(Distribution == "gamma" ~ "Gamma",
-                                                                 Distribution == "norm" ~ "Normal",
-                                                                 Distribution == "student" ~ "t(df=2)",
-                                                                 Distribution == "student3" ~ "t(df=3)",
-                                                                 Distribution == "mix1" ~ "Mixture1"))
+                                                     Distribution == "norm" ~ "Normal",
+                                                     Distribution == "student" ~ "t(df=2)",
+                                                     Distribution == "mix1" ~ "Mixture1",
+                                                     Distribution == "mix2" ~ "Mixture2",
+                                                     Distribution == "stud3nt" ~ "t(df=3)",
+                                                     Distribution == "unif" ~ "Uniform"))
 
 
-tran_resid_df$Distribution <- factor(tran_resid_df$Distribution, levels = c("Gamma", "Normal", "Mixture1","t(df=3)","t(df=2)"))
+tran_resid_df$Distribution <- factor(tran_resid_df$Distribution, levels = c("Gamma", "Normal","Uniform", "Mixture1","Mixture2","t(df=3)","t(df=2)"))
 
 
 tran_resid_df <- tran_resid_df %>% mutate(Transition = case_when(Transition == "Sleep" ~ "Wake to Sleep",
@@ -556,11 +591,11 @@ tran_resid_df <- tran_resid_df %>% mutate(Transition = case_when(Transition == "
 
 ```{r,fig.height=9,fig.width=9}
 
-# tran_resid_df <- tran_resid_df[,-c(4)]
+# tran_resid_df <- tran_resid_df[,-c(3,4)]
 
 # plot_data = nested_loop_base_data(
 #     tran_resid_df,
-#     x = "xfiller", steps = c("Number of Participants","Distribution"),
+#     x = "xfiller", steps = c("Distribution"),
 #     # x = "xfiller", steps = c("Days of Follow-Up","Number of Participants"),
 #     grid_cols = c("Transition"),
 #     grid_rows = c("Covariate"),
@@ -583,9 +618,14 @@ plot_data = nested_loop_base_data(
 p = nested_loop_base_plot(
     plot_data,
     x_name = "", 
-    y_name = "Median Residual",
+    y_name = "Rate",
     colors = viridis::viridis(11)[c(1,3:10)],
-    legend_labels = c(0,1,2,3,4,5,6,7,8),
+    shapes = c(17,15,16,16,16,16,16,16,16),
+    sizes = c(2,1,1,1,1,1,1,1,1),
+    legend_labels = c("Individual Emission HMM",
+                      "Shared Emission HMM","MHMM2","MHMM3",
+                      "MHMM4","MHMM5","MHMM6",
+                      "MHMM7","MHMM8"),
     connect_spus = T
 )
 
@@ -670,47 +710,54 @@ time_df <- time_df %>% mutate(Distribution = case_when(Distribution == "gamma" ~
                                                                  Distribution == "norm" ~ "Normal",
                                                                  Distribution == "student" ~ "t(df=2)",
                                                                  Distribution == "student3" ~ "t(df=3)",
-                                                                 Distribution == "mix1" ~ "Mixture1"))
+                                                                 Distribution == "mix1" ~ "Mixture1",
+                                                                 Distribution == "mix2" ~ "Mixture2",
+                                                                 Distribution == "unif" ~ "Uniform"))
 
 
-time_df$Distribution <- factor(time_df$Distribution, levels = c("Gamma", "Normal", "Mixture1","t(df=3)","t(df=2)"))
+time_df$Distribution <- factor(time_df$Distribution, levels = c("Gamma", "Normal","Uniform", "Mixture1","Mixture2","t(df=3)","t(df=2)"))
 
 
 ```
 
 
 ```{r,fig.height=9,fig.width=9}
-# time_df <- time_df[,-2]
-
-# plot_data = nested_loop_base_data(
-#     time_df,
-#     x = "xfiller", steps = c("Number of Participants","Distribution"),
-#     spu_x_shift = 2,
-# )
+# time_df <- time_df[,-c(1,2)]
 
 plot_data = nested_loop_base_data(
     time_df,
-    x = "xfiller", steps = c("Days of Follow-Up","Number of Participants","Distribution"),
-    # x = "xfiller", steps = c("Days of Follow-Up","Number of Participants"),
+    x = "xfiller", steps = c("Distribution"),
     spu_x_shift = 2,
-    replace_labels = list("Days of Follow-Up" = c("96" = "1",
-                                        "672" = "7")
-
-                             ),
 )
+
+# plot_data = nested_loop_base_data(
+#     time_df,
+#     x = "xfiller", steps = c("Days of Follow-Up","Number of Participants","Distribution"),
+#     # x = "xfiller", steps = c("Days of Follow-Up","Number of Participants"),
+#     spu_x_shift = 2,
+#     replace_labels = list("Days of Follow-Up" = c("96" = "1",
+#                                         "672" = "7")
+# 
+#                              ),
+# )
 
 p = nested_loop_base_plot(
     plot_data,
     x_name = "", 
-    y_name = "Median Running Time (Hours)",
+    y_name = "Rate",
     colors = viridis::viridis(11)[c(1,3:10)],
-    legend_labels = c(0,1,2,3,4,5,6,7,8),
+    shapes = c(17,15,16,16,16,16,16,16,16),
+    sizes = c(2,1,1,1,1,1,1,1,1),
+    legend_labels = c("Individual Emission HMM",
+                      "Shared Emission HMM","MHMM2","MHMM3",
+                      "MHMM4","MHMM5","MHMM6",
+                      "MHMM7","MHMM8"),
     connect_spus = T
 )
 
 plot_data = nested_loop_paramsteps_data(
     plot_data,
-    steps_y_base = -1, steps_y_height = .5, steps_y_shift = .55
+    steps_y_base = -.25, steps_y_height = .25, steps_y_shift = .25
 )
 
 p = nested_loop_paramsteps_plot(
@@ -744,5 +791,145 @@ p + labs(color='Number of Support Points',title = "Median Running Time by Model,
 # setwd("../Plots")
 # ggsave("NestedLoopCompTime.png",width = 9,height = 9)
 ```
+
+
+
+```{r}
+  
+# ###NAP
+# 
+# 
+# clust_num <- 8
+# dist_num <- length(MultiSim)
+# final_df <- data.frame()
+# 
+# for (dist_ind in 1:dist_num){
+#   size_num <- length(MultiSim[[dist_ind]])
+#   for (size_ind in 1:size_num){
+#     for (clust_ind in 1:(clust_num+1)){
+#       nRE <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[8]]
+#       nap_med <- apply(MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[12]],1,median)
+#       nobs <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[3]][1]
+#       lobs <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[3]][2]
+#       dist <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[4]]
+#       
+#       working_df <- data.frame(estimates = nap_med,
+#                              numberRE = nRE,
+#                              numObs = nobs,
+#                              lenObs = lobs,
+#                              dist = dist)
+#       final_df <- rbind(final_df,working_df)
+#     }
+#   }
+#   
+# }
+# 
+# library(tidyr)
+# 
+# 
+# library(looplot)
+# 
+# nap_df <- final_df %>% pivot_wider(names_from = numberRE, values_from = estimates,names_prefix = "Cluster") 
+# 
+# nap_df <- nap_df%>% mutate(xfiller = 1) 
+# 
+# colnames(nap_df)[1] <- "Number of Participants"
+# colnames(nap_df)[2] <- "Days of Follow-Up"
+# colnames(nap_df)[3] <- "Distribution"
+# 
+# nap_df <- nap_df %>% mutate(Distribution = case_when(Distribution == "gamma" ~ "Gamma",
+#                                                      Distribution == "norm" ~ "Normal",
+#                                                      Distribution == "student" ~ "t(df=2)",
+#                                                      Distribution == "mix1" ~ "Mixture1",
+#                                                      Distribution == "stud3nt" ~ "t(df=3)"))
+# 
+# 
+# nap_df$Distribution <- factor(nap_df$Distribution, levels = c("Gamma", "Normal", "Mixture1","t(df=3)","t(df=2)"))
+# 
+# #Only focus on sensitivity 
+# #Comment out this line for results on PPV too
+# # vit_df <- vit_df %>% filter(.[[1]] != "Wake PPV" & .[[1]] != "Sleep PPV")
+```
+
+
+```{r,fig.height=9,fig.width=9}
+
+# # vit_df <- vit_df[,-2]
+# 
+# 
+# # plot_data = nested_loop_base_data(
+# #     vit_df,
+# #     x = "xfiller", steps = c("Number of Participants","Distribution"),
+# #     # x = "xfiller", steps = c("Days of Follow-Up","Number of Participants"),
+# #     grid_cols = c("Type"),
+# #     grid_rows = c("State"),
+# #     spu_x_shift = 2
+# # )
+# 
+# plot_data = nested_loop_base_data(
+#     nap_df,
+#     x = "xfiller", steps = c("Days of Follow-Up","Number of Participants","Distribution"),
+#     # x = "xfiller", steps = c("Days of Follow-Up","Number of Participants"),
+#     spu_x_shift = 2,
+#     replace_labels = list("Days of Follow-Up" = c("96" = "1",
+#                                         "672" = "7")
+#                           ),
+# )
+# 
+# p = nested_loop_base_plot(
+#     plot_data,
+#     x_name = "", 
+#     y_name = "Nap Sensitivity",
+#     colors = viridis::viridis(11)[c(1,3:10)],
+#     legend_labels = c("Individual Emission HMM",
+#                       "Shared Emission HMM","MHMM2","MHMM3",
+#                       "MHMM4","MHMM5","MHMM6",
+#                       "MHMM7","MHMM8"),
+#     connect_spus = T
+# )
+# 
+# plot_data = nested_loop_paramsteps_data(
+#     plot_data,
+#     steps_y_base = 0.45, steps_y_height = .025, steps_y_shift = .05
+# )
+# 
+# p = nested_loop_paramsteps_plot(
+#     p, plot_data, 
+#     steps_values_annotate = TRUE, 
+#     steps_annotation_size = 2.5
+# )
+# 
+# p = add_processing(
+#     p, 
+#     list(
+#         # set limits
+#         adjust_ylim = list(
+#             y_expand_add = c(-0.05, NULL)
+#         ),
+#         # adjust theme
+#         add_custom_theme = list(
+#             axis.text.x=element_blank(), 
+#             axis.ticks.x=element_blank(),
+#             legend.position = "top", 
+#             panel.grid.major = element_line(
+#               color = "grey65", size = 0.1
+#             )
+#         ), 
+#         # add horizontal lines
+#         add_abline = list(
+#             intercept = 0
+#         )
+#     )
+# )
+# 
+# p + labs(color='Model',title = "Nap Sensitivity and PPV by Model, Sample Size, and RE Distribution") +
+#   guides(size = F, shape = F, linetype = F)
+# 
+# # setwd("../Plots")
+# # ggsave("NestedLoopNap.png",width = 9,height = 9)
+```
+
+
+
 
 

@@ -197,7 +197,7 @@ ParseSingleSim <- function(path){
 }
 
 
-path_size <- "C:/Users/jorda/Documents/Grad School/Research/ActivityHMM/ParseSims/Sims/norm/Size4/"
+path_size <- "/Users/aronjr/Documents/Predoc/ActivityHMM/ParseSims/Sims/Stud3nt/Size4"
 SingleSim <- ParseSingleSim(path_size)  
 
 
