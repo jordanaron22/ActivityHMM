@@ -1,10 +1,10 @@
 set_seed <- T
 sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
-sim_num <- 1
+# sim_num <- 1
 
 real_data <- F
 
-epsilon <- 1e-5
+epsilon <- .001
 # epsilon <- 1e-100
 lepsilon <- log(epsilon)
 
@@ -23,7 +23,7 @@ print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",R
 
 fix_sim <- F
 
-if(is.na(RE_num)){RE_num <- 2}
+if(is.na(RE_num)){RE_num <- 5}
 if(is.na(sim_size)){sim_size <- 0}
 if(is.na(RE_type)){RE_type <- "norm"}
 
@@ -222,7 +222,7 @@ BackwardIndAll <- function(act, tran_list, emit_act_array,tran_ind_vec,lepsilon,
   for (ind in 1:n){
     tran_ind <- tran_ind_vec[ind]
     emit_ind <- array(emit_act_array[,,ind],dim = c(2,2,1))
-    beta_ind <- BackwardIndC(act[,ind],tran_list,emit_ind,tran_ind,0,lepsilon)
+    beta_ind <- BackwardIndC(act[,ind],tran_list,emit_ind,tran_ind,0,lepsilon,act_light_binom)
     beta_ind <- array(beta_ind,c(fu,2,1))
     beta[[ind]] <- beta_ind
   }
@@ -1265,7 +1265,7 @@ CalcSigmaWake <- function(act,weights_array,mean_vec){
   return(sqrt(num/(denom)))
 }
 
-CalcSigmaWakeInd <- function(act,weights_array,wake_means_ind){
+CalcSigmaWakeInd <- function(act,weights_array,wake_means_ind,old_sigma){
   n <- dim(weights_array)[2]
   sigma_vec <- numeric(n)
   for (ind in 1:n){
@@ -1281,7 +1281,7 @@ CalcSigmaWakeInd <- function(act,weights_array,wake_means_ind){
     
     if(sigma_vec[ind] == Inf | is.na(sigma_vec[ind]) | sigma_vec[ind] == 0){
       # print("AAAAAAAAA")
-      sigma_vec[ind] <- .01
+      sigma_vec[ind] <- old_sigma[ind]
     }
   }
   
@@ -1391,12 +1391,12 @@ mean_set_true <- central_mean + re_set
 
 init_true <- c(1/3,2/3)
 
-if (!real_data){
+if (real_data){
+  params_tran_true <- c(-3,.01,.01,.01,.01,.01,.9,-.8,.01,.01,.01,.01,.01,.01,.01,.01,.01,.01,
+                        -2.2,.01,.01,.01,.01,.01,-.75,.8,.01,.01,.01,.01,.01,.01,.01,.01,.01,.01)
+} else{
   params_tran_true <- c(-3,.5,-.25,0,0,0,.9,-.8,-1,.1,.2,1.5,0,0,0,0,0,0,
                         -2.2,.3,-.3,0,0,0,-.75,.8,.75,.2,.3,.75,0,0,0,0,0,0)
-} else{
-  params_tran_true <- c(-3,.01,.01,.01,.01,.01,.9,-.8,.01,.01,.01,.01,.01,.01,.01,.01,.01,.01,
-                   -2.2,.01,.01,.01,.01,.01,-.75,.8,.01,.01,.01,.01,.01,.01,.01,.01,.01,.01)
 }
 
 
@@ -1416,7 +1416,7 @@ emit_act_true_sim <- emit_act_true[,,1]
 emit_act_true_sim[1,1] <- central_mean
 
 #Prob of being below detection limit
-act_light_binom_true <- c(.2)
+act_light_binom_true <- c(.1)
 # act_light_binom_true <- c(0)
 
 #### Simulate True Data ####
@@ -1473,7 +1473,7 @@ if (!real_data){
   
   
   #CHECK MISSING AND CORRELATION BEFORE SIM
-  act <- apply(act,2,InduceMissingVec, prob = .3)
+  # act <- apply(act,2,InduceMissingVec, prob = .2)
   # act <- apply(act,2,InduceMissingVec, prob = 0)
   
   init  <- c(runif(1,.1,.5),0)
@@ -1530,14 +1530,13 @@ if(real_data){
   
   init  <- c(1/3,2/3)
   
-  params_tran <- c(-3,.01,.01,.01,.01,.01,.9,-.8,.01,.01,.01,.01,.01,.01,.01,.01,.01,.01,
-                   -2.2,.01,.01,.01,.01,.01,-.75,.8,.01,.01,.01,.01,.01,.01,.01,.01,.01,.01)
+  params_tran <- params_tran_true
   
   #need to fix this
   # emit_act <- matrix(c(4,2,
   #                      0,2), byrow = T, 2)
   
-  act_light_binom <- c(.05)
+  act_light_binom <- act_light_binom_true
 }
 
 
@@ -1562,14 +1561,15 @@ pi_l <- pi_l/sum(pi_l)
 
 
 # init <- init_true_emp
-params_tran <- params_tran_true
-emit_act <- emit_act_true_emp
-pi_l <- pi_l_true_emp
-
-# init <- init_true
 # params_tran <- params_tran_true
-# emit_act <- emit_act_true
-# pi_l <- pi_l_true
+# emit_act <- emit_act_true_emp
+# pi_l <- pi_l_true_emp
+
+init <- init_true
+params_tran <- params_tran_true
+act_light_binom <- act_light_binom_true
+emit_act <- emit_act_true
+pi_l <- pi_l_true
 # emit_act_array <- array(matrix(c(2.5,2,-1,2),2,2,byrow = T),dim=c(2,2,num_of_people))
 
 tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
@@ -1595,7 +1595,6 @@ like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
-
 while(abs(like_diff) > 1e-4){
   
   tic()
@@ -1612,7 +1611,6 @@ while(abs(like_diff) > 1e-4){
     params_tran <- CalcTranBothC(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran,pi_l,lepsilon, act_light_binom,F)
   } else {
     params_tran <- CalcTranBothC(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_l,lepsilon,act_light_binom,T)
-    
   }
   
   tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
@@ -1629,9 +1627,6 @@ while(abs(like_diff) > 1e-4){
   act_vec <- as.vector(act)
   lod_act_weight <- as.numeric(act_vec==log(epsilon))
   act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(1-weights_vec[!is.na(as.vector(act))])
-  
-  lod_act_weight[!is.na(as.vector(act))] %*% (1-weights_vec)[!is.na(as.vector(act))]/sum(1-weights_vec[!is.na(as.vector(act))])
-  
   ################## Emission Dist Param
   
   
@@ -1659,7 +1654,7 @@ while(abs(like_diff) > 1e-4){
     
   } else {
     wake_means_ind <- CalcMeansWakeInd(act,weights_array)
-    wake_sigma_ind <- CalcSigmaWakeInd(act,weights_array,wake_means_ind)
+    wake_sigma_ind <- CalcSigmaWakeInd(act,weights_array,wake_means_ind,emit_act_array[1,2,])
     sleep_mean_ind <- CalcMeanSleep(act,weights_mat,lepsilon)[[1]]
     sleep_sigma_ind <- CalcSigmaSleep(act,weights_mat,sleep_mean_ind,lepsilon)
     

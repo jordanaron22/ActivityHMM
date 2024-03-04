@@ -21,12 +21,15 @@ NumericVector vectorEqBool(NumericVector vec, double lod) {
 
 // [[Rcpp::export]]
 NumericVector logClassificationC(int current_state, NumericVector act_obs, double mu, double sig, double lod, double act_light_binom) {
+
+	
 	NumericVector temp;
 	if (current_state == 0) {
 		temp = Rcpp::dnorm( act_obs, mu, sig, true );
 	} else {
 		NumericVector vec_eq = vectorEqBool(act_obs, lod);
 		temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom)*vec_eq);
+		//temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom + ((1-act_light_binom)*Rcpp::dnorm( act_obs, mu, sig, false )))*vec_eq);
 		
 	}
 
@@ -51,6 +54,7 @@ vec logClassificationC2(int current_state, NumericVector act_obs, double mu, dou
   } else {
     NumericVector vec_eq = vectorEqBool(act_obs, lod);
     temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom)*vec_eq);
+	//temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom + ((1-act_light_binom)*Rcpp::dnorm( act_obs, mu, sig, false )))*vec_eq);
   }
 
   LogicalVector nan_vec = is_na(act_obs);
