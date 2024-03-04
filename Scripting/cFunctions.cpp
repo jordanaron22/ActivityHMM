@@ -20,13 +20,13 @@ NumericVector vectorEqBool(NumericVector vec, double lod) {
 
 
 // [[Rcpp::export]]
-NumericVector logClassificationC(int current_state, NumericVector act_obs, double mu, double sig, double lod) {
+NumericVector logClassificationC(int current_state, NumericVector act_obs, double mu, double sig, double lod, double act_light_binom) {
 	NumericVector temp;
 	if (current_state == 0) {
 		temp = Rcpp::dnorm( act_obs, mu, sig, true );
 	} else {
 		NumericVector vec_eq = vectorEqBool(act_obs, lod);
-		temp = (Rcpp::dnorm( act_obs, mu, sig, true ) * (1 - vec_eq)) + (log(1)*vec_eq);
+		temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom)*vec_eq);
 		
 	}
 
@@ -44,13 +44,13 @@ NumericVector logClassificationC(int current_state, NumericVector act_obs, doubl
 }
 
 // [[Rcpp::export]]
-vec logClassificationC2(int current_state, NumericVector act_obs, double mu, double sig, double lod) {
+vec logClassificationC2(int current_state, NumericVector act_obs, double mu, double sig, double lod, double act_light_binom) {
   vec temp;
   if (current_state == 0) {
     temp = Rcpp::dnorm( act_obs, mu, sig, true );
   } else {
     NumericVector vec_eq = vectorEqBool(act_obs, lod);
-    temp = (Rcpp::dnorm( act_obs, mu, sig, true ) * (1 - vec_eq)) + (log(1)*vec_eq);
+    temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom)*vec_eq);
   }
 
   LogicalVector nan_vec = is_na(act_obs);
@@ -107,13 +107,13 @@ double logSumExpC(const arma::vec& x) {
 }
 
 // [[Rcpp::export]]
-mat ForwardIndC(const NumericVector& act_ind, NumericVector init, Rcpp::List tran_list, cube emit_act,int tran_ind, int clust_i, double lepsilon, double log_sweight){
+mat ForwardIndC(const NumericVector& act_ind, NumericVector init, Rcpp::List tran_list, cube emit_act,int tran_ind, int clust_i, double lepsilon, double act_light_binom, double log_sweight){
 
 	mat alpha( act_ind.length(), 2 );
 
-	NumericVector log_class_0 = logClassificationC( 0, act_ind, emit_act(0,0,clust_i), emit_act(0,1,clust_i), lepsilon );
+	NumericVector log_class_0 = logClassificationC( 0, act_ind, emit_act(0,0,clust_i), emit_act(0,1,clust_i), lepsilon, act_light_binom );
 
-	NumericVector log_class_1 = logClassificationC( 1, act_ind, emit_act(1,0,clust_i), emit_act(1,1,clust_i), lepsilon );
+	NumericVector log_class_1 = logClassificationC( 1, act_ind, emit_act(1,0,clust_i), emit_act(1,1,clust_i), lepsilon, act_light_binom );
 
 	alpha(0,0) = log(init(0)) + log_class_0[0];
 	alpha(0,1) = log(init(1)) + log_class_1[0];
@@ -144,14 +144,14 @@ mat ForwardIndC(const NumericVector& act_ind, NumericVector init, Rcpp::List tra
 }
 
 // [[Rcpp::export]]
-mat BackwardIndC(const NumericVector& act_ind, Rcpp::List tran_list, cube emit_act,int tran_ind, int clust_i, double lepsilon){
+mat BackwardIndC(const NumericVector& act_ind, Rcpp::List tran_list, cube emit_act,int tran_ind, int clust_i, double lepsilon, double act_light_binom){
   
   int n = act_ind.length(); 
   mat beta( n, 2 );
   
-  NumericVector log_class_0 = logClassificationC( 0, act_ind, emit_act(0,0,clust_i), emit_act(0,1,clust_i), lepsilon );
+  NumericVector log_class_0 = logClassificationC( 0, act_ind, emit_act(0,0,clust_i), emit_act(0,1,clust_i), lepsilon, act_light_binom );
   
-  NumericVector log_class_1 = logClassificationC( 1, act_ind, emit_act(1,0,clust_i), emit_act(1,1,clust_i), lepsilon );
+  NumericVector log_class_1 = logClassificationC( 1, act_ind, emit_act(1,0,clust_i), emit_act(1,1,clust_i), lepsilon, act_light_binom );
   
   beta(n-1,0) = log(1);
   beta(n-1,1) = log(1);
@@ -183,7 +183,7 @@ mat BackwardIndC(const NumericVector& act_ind, Rcpp::List tran_list, cube emit_a
 }
 
 // [[Rcpp::export]]
-List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube emit_act, NumericVector tran_ind_vec, double lepsilon, NumericVector log_sweights_vec){
+List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube emit_act, NumericVector tran_ind_vec, double lepsilon, double act_light_binom, NumericVector log_sweights_vec){
 	int num_people = act.ncol();
 	int len = act.nrow();
 	int num_re = emit_act.n_slices;
@@ -197,7 +197,7 @@ List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube
 
 		
 		for (int clust_i = 0; clust_i < num_re; clust_i++){
-			Cube1.slice(clust_i) = ForwardIndC(act_ind, init, tran_list, emit_act, tran_ind, clust_i, lepsilon, log_sweight);
+			Cube1.slice(clust_i) = ForwardIndC(act_ind, init, tran_list, emit_act, tran_ind, clust_i, lepsilon, act_light_binom, log_sweight);
 
 		}
 
@@ -207,7 +207,7 @@ List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube
 }
 
 // [[Rcpp::export]]
-List BackwardC(const NumericMatrix& act, List tran_list, cube emit_act, NumericVector tran_ind_vec, double lepsilon){
+List BackwardC(const NumericMatrix& act, List tran_list, cube emit_act, NumericVector tran_ind_vec, double lepsilon, double act_light_binom){
 	int num_people = act.ncol();
 	int len = act.nrow();
 	int num_re = emit_act.n_slices;
@@ -219,7 +219,7 @@ List BackwardC(const NumericMatrix& act, List tran_list, cube emit_act, NumericV
 		int tran_ind = tran_ind_vec(ind);
 		
 		for (int clust_i = 0; clust_i < num_re; clust_i++){
-			Cube1.slice(clust_i) = BackwardIndC(act_ind, tran_list, emit_act, tran_ind, clust_i, lepsilon);
+			Cube1.slice(clust_i) = BackwardIndC(act_ind, tran_list, emit_act, tran_ind, clust_i, lepsilon, act_light_binom);
 
 		}
 
@@ -229,7 +229,7 @@ List BackwardC(const NumericMatrix& act, List tran_list, cube emit_act, NumericV
 }  
 
 // [[Rcpp::export]]
-cube CalcTranHelperC(int init_state, int new_state, NumericMatrix act, List tran_list_mat, NumericVector tran_ind_vec, cube emit_act, NumericVector ind_like_vec, List alpha, List beta, double lepsilon, vec pi_l){
+cube CalcTranHelperC(int init_state, int new_state, NumericMatrix act, List tran_list_mat, NumericVector tran_ind_vec, cube emit_act, NumericVector ind_like_vec, List alpha, List beta, double lepsilon, double act_light_binom, vec pi_l){
   int num_people = act.ncol();
   int len = act.nrow();
   int num_re = emit_act.n_slices;
@@ -262,7 +262,7 @@ cube CalcTranHelperC(int init_state, int new_state, NumericMatrix act, List tran
 	  
 
 
-	  vec class_vec = logClassificationC2( new_state, act_ind_m1, emit_act(new_state,0,clust_i), emit_act(new_state,1,clust_i), lepsilon );
+	  vec class_vec = logClassificationC2( new_state, act_ind_m1, emit_act(new_state,0,clust_i), emit_act(new_state,1,clust_i), lepsilon, act_light_binom );
 	  
 	  vec alpha_ind_slice = alpha_ind(span(0,len-2),span(init_state,init_state),span(clust_i,clust_i));
 	  vec beta_ind_slice = beta_ind(span(1,len-1),span(new_state,new_state),span(clust_i,clust_i));
@@ -284,7 +284,7 @@ cube CalcTranHelperC(int init_state, int new_state, NumericMatrix act, List tran
 
 
 // [[Rcpp::export]]
-cube CalcTranIndHelperC(int init_state, int new_state, NumericMatrix act, List tran_list_mat, NumericVector tran_ind_vec, cube emit_act, NumericVector ind_like_vec, List alpha, List beta, double lepsilon, vec pi_l){
+cube CalcTranIndHelperC(int init_state, int new_state, NumericMatrix act, List tran_list_mat, NumericVector tran_ind_vec, cube emit_act, NumericVector ind_like_vec, List alpha, List beta, double lepsilon, double act_light_binom, vec pi_l){
   int num_people = act.ncol();
   int len = act.nrow();
   int num_re = 1;
@@ -317,7 +317,7 @@ cube CalcTranIndHelperC(int init_state, int new_state, NumericMatrix act, List t
 	  
 
 
-	  vec class_vec = logClassificationC2( new_state, act_ind_m1, emit_act(new_state,0,ind), emit_act(new_state,1,ind), lepsilon );
+	  vec class_vec = logClassificationC2( new_state, act_ind_m1, emit_act(new_state,0,ind), emit_act(new_state,1,ind), lepsilon, act_light_binom );
 	  
 	  vec alpha_ind_slice = alpha_ind(span(0,len-2),span(init_state,init_state),span(clust_i,clust_i));
 	  vec beta_ind_slice = beta_ind(span(1,len-1),span(new_state,new_state),span(clust_i,clust_i));

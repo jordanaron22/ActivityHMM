@@ -1,17 +1,12 @@
 set_seed <- T
 sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
-# sim_num <- 1
-
-fix_sim <- F
+sim_num <- 1
 
 real_data <- F
-sim_covar <- T
 
-epsilon <- 1e-15
+epsilon <- 1e-5
 # epsilon <- 1e-100
 lepsilon <- log(epsilon)
-
-
 
 # wake_params <- c(2.562106,.5992697)
 # sleep_params <- c(-1.1387,1.9459)
@@ -26,8 +21,9 @@ sim_size <- as.numeric(commandArgs(TRUE)[2])
 RE_type <- as.character(commandArgs(TRUE)[3])
 print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",RE_num))
 
+fix_sim <- F
 
-if(is.na(RE_num)){RE_num <- 3}
+if(is.na(RE_num)){RE_num <- 2}
 if(is.na(sim_size)){sim_size <- 0}
 if(is.na(RE_type)){RE_type <- "norm"}
 
@@ -86,7 +82,7 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
   if(RE_type == "mix1"){re_vec <- c(rnorm(num_of_people/2,-2,2),rgamma(num_of_people/2,2,1))}
   if(RE_type == "mix2"){re_vec <- c(rnorm(num_of_people/2,2,2),-rgamma(num_of_people/2,2,1))}
   
-  if (sim_covar){tran_covar_num <- 3
+  if (!real_data){tran_covar_num <- 3
   }else {tran_covar_num <- 6}
   
   
@@ -144,7 +140,8 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
   return(list(hidden_states_matrix,activity_matrix,covar_mat_tran,act_lod,re_vec,nap_indicator_matrix))
 }
 
-logClassification <- function(time,current_state,act,emit_act,clust_i){
+
+logClassification <- function(time,current_state,act,emit_act,clust_i,act_light_binom){
   
   mu_act <- emit_act[current_state+1,1,clust_i]
   sig_act <- emit_act[current_state+1,2,clust_i]
@@ -155,9 +152,9 @@ logClassification <- function(time,current_state,act,emit_act,clust_i){
       lognorm_dens <- log(dnorm(act[time],mu_act,sig_act)) 
     } else {
       if (act[time]==lepsilon){
-        lognorm_dens <- log(1)
+        lognorm_dens <- log(act_light_binom)
       } else{
-        lognorm_dens <- dnorm(act[time],mu_act,sig_act,log = T)
+        lognorm_dens <- log(1-act_light_binom)+dnorm(act[time],mu_act,sig_act,log = T)
       }
       
     }
@@ -204,72 +201,21 @@ ChooseTran <- function(covar_tran_bool){
   }
 }
 
-BackwardInd <- function(act_ind, tran_list, emit_act,tran_ind,clust_i) {
-  
-  n <- length(act_ind)
-  beta <- matrix(0, ncol = 2, nrow = n)
-  
-  beta[n,1] <- log(1)
-  beta[n,2] <- log(1)
-  
-  log_class_0 <- unlist(lapply(c(1:n),logClassification,current_state = 0,act= act_ind, emit_act=emit_act, clust_i = clust_i))
-  log_class_1 <- unlist(lapply(c(1:n),logClassification,current_state = 1,act= act_ind, emit_act=emit_act, clust_i = clust_i))
-  
-  # log_class_0 <- logClassificationC(current_state = 0, act_obs = act_ind,
-  #                                   mu = emit_act[1,1,clust_i], sig = emit_act[1,2,clust_i],
-  #                                   act_binom = act_light_binom,lod = lepsilon)
-  # 
-  # log_class_1 <- logClassificationC(current_state = 1, act_obs = act_ind,
-  #                                   mu = emit_act[2,1,clust_i], sig = emit_act[2,2,clust_i],
-  #                                   act_binom = act_light_binom,lod = lepsilon)
-  
-  
-  for (i in (n-1):1){
-    
-    #(i-1)%%96+1 is almost modulo 96 but multiples of 96 become 1
-    tran <- tran_list[[tran_ind]][[(i+1-1)%%96+1]]
-    
-    
-    #State 0 from 0
-    # bp_00 <- log(tran[1,1]) + logClassification(i+1,0,act_ind,emit_act,act_light_binom,clust_i) + beta[i+1,1]
-    bp_00 <- log(tran[1,1]) + log_class_0[i+1] + beta[i+1,1]
-    
-    #State 1 from 0
-    # bp_01 <- log(tran[1,2]) + logClassification(i+1,1,act_ind,emit_act,act_light_binom,clust_i) + beta[i+1,2] 
-    bp_01 <- log(tran[1,2]) + log_class_1[i+1] + beta[i+1,2] 
-    
-    #State 0 from 1
-    # bp_10 <- log(tran[2,1]) + logClassification(i+1,0,act_ind,emit_act,act_light_binom,clust_i) + beta[i+1,1] 
-    bp_10 <- log(tran[2,1]) + log_class_0[i+1] + beta[i+1,1] 
-    
-    #State 1 from 1
-    # bp_11 <- log(tran[2,2]) + logClassification(i+1,1,act_ind,emit_act,act_light_binom,clust_i) + beta[i+1,2] 
-    bp_11 <- log(tran[2,2]) + log_class_1[i+1] + beta[i+1,2] 
-    
-    
-    beta[i,1] <- logSumExp(c(bp_00,bp_01))
-    beta[i,2] <- logSumExp(c(bp_10,bp_11))
-  }
-  
-  return(beta)
-  
-}
-
-ForwardIndAll <- function(act,init,tran_list,emit_act_array,tran_ind_vec, lepsilon, log_sweights_vec){
+ForwardIndAll <- function(act,init,tran_list,emit_act_array,tran_ind_vec, lepsilon, act_light_binom,log_sweights_vec){
   n <- dim(act)[2]
   fu <- dim(act)[1]
   alpha <- list()
   for (ind in 1:n){
     tran_ind <- tran_ind_vec[ind]
     emit_ind <- array(emit_act_array[,,ind],dim = c(2,2,1))
-    alpha_ind <-ForwardIndC(act[,ind],init,tran_list,emit_ind,tran_ind,0,lepsilon,log_sweights_vec[ind])
+    alpha_ind <-ForwardIndC(act[,ind],init,tran_list,emit_ind,tran_ind,0,lepsilon,act_light_binom,log_sweights_vec[ind])
     alpha_ind <- array(alpha_ind,c(fu,2,1))
     alpha[[ind]] <- alpha_ind
   }
   return(alpha)
 }
 
-BackwardIndAll <- function(act, tran_list, emit_act_array,tran_ind_vec,lepsilon){
+BackwardIndAll <- function(act, tran_list, emit_act_array,tran_ind_vec,lepsilon,act_light_binom){
   n <- dim(act)[2]
   fu <- dim(act)[1]
   beta <- list()
@@ -286,49 +232,6 @@ BackwardIndAll <- function(act, tran_list, emit_act_array,tran_ind_vec,lepsilon)
 TranByTimeVec <- function(index, params_tran, time_vec){
   return(lapply(time_vec, Params2Tran, params_tran = params_tran,index=index))
 }
-
-ForwardInd <- function(act_ind, init, tran_list, emit_act,tran_ind,clust_i) {
-  alpha <- matrix(0, ncol = 2, nrow=length(act_ind))
-  
-  log_class_0 <- unlist(lapply(c(1:length(act_ind)),logClassification,current_state = 0,act= act_ind, emit_act=emit_act, clust_i = clust_i))
-  log_class_1 <- unlist(lapply(c(1:length(act_ind)),logClassification,current_state = 1,act= act_ind, emit_act=emit_act, clust_i = clust_i))
-  
-  # log_class_0 <- logClassificationC(current_state = 0, act_obs = act_ind,
-  #                                   mu = emit_act[1,1,clust_i], sig = emit_act[1,2,clust_i],
-  #                                   act_binom = act_light_binom,lod = lepsilon)
-  # 
-  # log_class_1 <- logClassificationC(current_state = 1, act_obs = act_ind, 
-  #                                   mu = emit_act[2,1,clust_i], sig = emit_act[2,2,clust_i],
-  #                                   act_binom = act_light_binom,lod = lepsilon)
-  
-  alpha[1,1] <- log(init[1]) + log_class_0[1]
-  
-  alpha[1,2] <- log(init[2]) + log_class_1[1]
-  
-  for (i in 2:length(act_ind)){
-    
-    #(i-1)%%96+1 is almost modulo 96 but multiples of 96 become 1
-    tran <- tran_list[[tran_ind]][[(i-1)%%96+1]]
-    
-    #From state 0 to 0
-    fp_00 <- alpha[i-1,1] + log(tran[1,1]) + log_class_0[i]
-    
-    #From state 1 to 0
-    fp_10 <- alpha[i-1,2] + log(tran[2,1]) + log_class_0[i]
-    
-    #From state 0 to 1
-    fp_01 <- alpha[i-1,1] + log(tran[1,2]) + log_class_1[i]
-    
-    #From state 1 to 1
-    fp_11 <- alpha[i-1,2] + log(tran[2,2]) + log_class_1[i]
-    
-    alpha[i,1] <- logSumExp(c(fp_00,fp_10))
-    alpha[i,2] <- logSumExp(c(fp_01,fp_11))
-  }
-  
-  return(alpha)
-}
-
 
 CalcInit <- function(alpha, beta,pi_l,pop_pool = T){
   
@@ -472,7 +375,6 @@ IndLike <- function(alpha,pi_l,ind,len){
   likelihood <- logSumExp(SumOverREIndTime(alpha,pi_l,ind,len))
   return(likelihood)
 }
-
 
 CalcTran <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_l, return_grad = F){
   
@@ -752,7 +654,7 @@ CalcTranC <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_l){
   grad <- -gradient
   hess <- -hessian
   
-  if (sim_covar == T){
+  if (!real_data){
     null_inds <- grad != 0
     params_tran[null_inds] <- params_tran[null_inds] - solve(hess[null_inds,null_inds],grad[null_inds])
   } else {
@@ -900,7 +802,7 @@ CalcTranInd <- function(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran
   grad <- -gradient
   hess <- -hessian
   
-  if (sim_covar == T){
+  if (!real_data){
     null_inds <- grad != 0
     params_tran[null_inds] <- params_tran[null_inds] - solve(hess[null_inds,null_inds],grad[null_inds])
   } else {
@@ -912,7 +814,7 @@ CalcTranInd <- function(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran
   
 }
 
-CalcTranBothC <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_l,pop_pool){
+CalcTranBothC <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_l,lepsilon, act_light_binom, pop_pool){
   
   len <- dim(act)[1]
   
@@ -933,22 +835,22 @@ CalcTranBothC <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_
   
   if (pop_pool){
     tran_vals_re_00 <- CalcTranHelperC(0,0,
-                                       act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, pi_l)
+                                       act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, act_light_binom,pi_l)
     tran_vals_re_01 <- CalcTranHelperC(0,1,
-                                       act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, pi_l)
+                                       act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, act_light_binom,pi_l)
     tran_vals_re_10 <- CalcTranHelperC(1,0,
-                                       act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, pi_l)
+                                       act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, act_light_binom,pi_l)
     tran_vals_re_11 <- CalcTranHelperC(1,1,
-                                       act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, pi_l)
+                                       act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, act_light_binom,pi_l)
   } else {
     tran_vals_re_00 <- CalcTranIndHelperC(0,0,
-                                          act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, pi_l)
+                                          act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, act_light_binom,pi_l)
     tran_vals_re_01 <- CalcTranIndHelperC(0,1,
-                                          act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, pi_l)
+                                          act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, act_light_binom,pi_l)
     tran_vals_re_10 <- CalcTranIndHelperC(1,0,
-                                          act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, pi_l)
+                                          act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, act_light_binom,pi_l)
     tran_vals_re_11 <- CalcTranIndHelperC(1,1,
-                                          act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, pi_l)
+                                          act,tran_list_mat, tran_ind_vec, emit_act, ind_like_vec, alpha, beta,lepsilon, act_light_binom,pi_l)
     
   }
   
@@ -1118,7 +1020,7 @@ CalcTranBothC <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_
   grad <- -gradient
   hess <- -hessian
   
-  if (sim_covar == T){
+  if (!real_data){
     null_inds <- grad != 0
     params_tran[null_inds] <- params_tran[null_inds] - solve(hess[null_inds,null_inds],grad[null_inds])
   } else {
@@ -1127,7 +1029,6 @@ CalcTranBothC <- function(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_
   
   return(params_tran)
 }
-
 
 
 SolveCatch <- function(block_ind_hess,block_ind_grad) {
@@ -1185,7 +1086,6 @@ CondMarginalize <- function(alpha,beta,pi_l){
   return(weight_array)
 }
 
-
 CalcProbRE <- function(alpha,pi_l){
   
   len <- dim(alpha[[1]])[1]
@@ -1222,8 +1122,8 @@ ViterbiInd <- function(ind, RE_num){
   
   
   viterbi_mat <- matrix(NA,2,day_length)
-  viterbi_mat[1,1] <- log(init[1]) + logClassification(1,0,act[,ind],emit_ind,clust_ind)
-  viterbi_mat[2,1] <- log(init[2]) + logClassification(1,1,act[,ind],emit_ind,clust_ind)
+  viterbi_mat[1,1] <- log(init[1]) + logClassification(1,0,act[,ind],emit_ind,clust_ind,act_light_binom)
+  viterbi_mat[2,1] <- log(init[2]) + logClassification(1,1,act[,ind],emit_ind,clust_ind,act_light_binom)
   
   viterbi_ind_mat <- matrix(NA,2,day_length)
   
@@ -1234,12 +1134,12 @@ ViterbiInd <- function(ind, RE_num){
     
     tran <- Params2Tran(params_tran_ind,time,tran_ind)
     
-    viterbi_mat[1,time] <- logClassification(time,0,act[,ind],emit_ind,clust_ind)+ 
+    viterbi_mat[1,time] <- logClassification(time,0,act[,ind],emit_ind,clust_ind,act_light_binom)+ 
       max(viterbi_mat[1,time-1] + log(tran[1,1]),
           viterbi_mat[2,time-1] + log(tran[2,1]))
     
     
-    viterbi_mat[2,time] <- logClassification(time,1,act[,ind],emit_ind,clust_ind) + 
+    viterbi_mat[2,time] <- logClassification(time,1,act[,ind],emit_ind,clust_ind,act_light_binom) + 
       max(viterbi_mat[1,time-1] + log(tran[1,2]),
           viterbi_mat[2,time-1] + log(tran[2,2]))
     
@@ -1262,8 +1162,8 @@ ViterbiInd <- function(ind, RE_num){
   return(decoded_mc-1)
 } 
 
-if(sim_covar){tran_covar_num <- 3}
-if(!sim_covar){tran_covar_num <- 6}
+if(!real_data){tran_covar_num <- 3}
+if(real_data){tran_covar_num <- 6}
 
 
 Tran2DF <- function(params_tran){
@@ -1388,11 +1288,10 @@ CalcSigmaWakeInd <- function(act,weights_array,wake_means_ind){
   return(sigma_vec)
 }
 
-CalcMeanSleep <- function(act,weights_mat,lepsilon,pop_pool = T){
+CalcMeanSleep <- function(act,weights_mat,lepsilon){
   n <- dim(weights_mat)[2]
   num <- 0
   denom <- 0
-  mean_vec <- numeric(n)
   
   leps_indicator <- (act==lepsilon)
   leps_indicator[is.na(leps_indicator)] <- F
@@ -1406,27 +1305,23 @@ CalcMeanSleep <- function(act,weights_mat,lepsilon,pop_pool = T){
     
     num <- num + (1-weights_mat[inds_keep,ind]) %*% act_ind0[inds_keep]
     denom <- denom + sum(1-weights_mat[inds_keep,ind])
-    mean_vec[ind] <- ((1-weights_mat[inds_keep,ind]) %*% act_ind0[inds_keep])/sum(1-weights_mat[inds_keep,ind])
     
-    if(is.na(mean_vec[ind])){mean_vec[ind] <- -1}
   }
-  if (!pop_pool){return(mean_vec)}
+  
   return(num/denom)
 }
 
-CalcSigmaSleep <- function(act,weights_mat,sleep_mean, lepsilon,pop_pool=T){
+CalcSigmaSleep <- function(act,weights_mat,sleep_mean, lepsilon){
   n <- dim(weights_mat)[2]
   num <- 0
   denom <- 0
-  sigma_vec <- numeric(n)
   
   leps_indicator <- (act==lepsilon)
   leps_indicator[is.na(leps_indicator)] <- F
   
   for (ind in 1:n){
     
-    if (pop_pool){resid0 <- c(act[,ind] - sleep_mean)
-    } else{resid0 <- c(act[,ind] - sleep_mean[ind])}
+    resid0 <- c(act[,ind] - sleep_mean)
     
     inds_keep <- !is.na(resid0)
     
@@ -1435,14 +1330,9 @@ CalcSigmaSleep <- function(act,weights_mat,sleep_mean, lepsilon,pop_pool=T){
     
     num <- num + (1-weights_mat[inds_keep,ind]) %*% resid0[inds_keep]^2
     denom <- denom + sum(1-weights_mat[inds_keep,ind])
-    sigma_vec[ind] <- sqrt(((1-weights_mat[inds_keep,ind]) %*% resid0[inds_keep]^2)/sum(1-weights_mat[inds_keep,ind]))
     
-    if(sigma_vec[ind] == Inf | is.na(sigma_vec[ind]) | sigma_vec[ind] == 0){
-      # print("BBBBBBBB")
-      sigma_vec[ind] <- .01
-    }
   }
-  if (!pop_pool){return(sigma_vec)}
+  
   return(sqrt(num/denom))
 }
 
@@ -1499,9 +1389,9 @@ if (RE_num <= 1){
 mean_set_true <- central_mean + re_set
 
 
-init_true <- c(0.3347129,0.6652871)
+init_true <- c(1/3,2/3)
 
-if (!sim_covar){
+if (!real_data){
   params_tran_true <- c(-3,.5,-.25,0,0,0,.9,-.8,-1,.1,.2,1.5,0,0,0,0,0,0,
                         -2.2,.3,-.3,0,0,0,-.75,.8,.75,.2,.3,.75,0,0,0,0,0,0)
 } else{
@@ -1526,7 +1416,7 @@ emit_act_true_sim <- emit_act_true[,,1]
 emit_act_true_sim[1,1] <- central_mean
 
 #Prob of being below detection limit
-act_light_binom_true <- c(.1)
+act_light_binom_true <- c(.2)
 # act_light_binom_true <- c(0)
 
 #### Simulate True Data ####
@@ -1591,7 +1481,7 @@ if (!real_data){
   
   
   params_tran <- params_tran_true + runif(36,-.2,.2)
-  if (sim_covar){params_tran[c(4:6,13:18,22:24,31:36)] <- 0} 
+  if (!real_data){params_tran[c(4:6,13:18,22:24,31:36)] <- 0} 
 }
 
 #### Load in Real Data ####
@@ -1663,8 +1553,7 @@ emit_act[2,2,] <- emit_act[2,2,] + runif(1,-1/2,1/2)
 emit_act_array <- array(emit_act,dim=c(2,2,num_of_people))
 
 # act_light_binom <- c(runif(1,0,.1))
-act_light_binom <- .1
-act_light_binom_ind <- rep(.1, num_of_people)
+act_light_binom <- .2
 
 pi_l <- pi_l_true + runif(length(pi_l_true),0,.25)
 pi_l <- pi_l/sum(pi_l)
@@ -1673,9 +1562,9 @@ pi_l <- pi_l/sum(pi_l)
 
 
 # init <- init_true_emp
-# params_tran <- params_tran_true
-# emit_act <- emit_act_true_emp
-# pi_l <- pi_l_true_emp
+params_tran <- params_tran_true
+emit_act <- emit_act_true_emp
+pi_l <- pi_l_true_emp
 
 # init <- init_true
 # params_tran <- params_tran_true
@@ -1690,11 +1579,11 @@ time_vec <- c()
 
 print("PRE ALPHA")
 if (RE_num==0){
-  alpha <- ForwardIndAll(act,init,tran_list,emit_act_array,tran_ind_vec,lepsilon, log_sweights_vec)
-  beta <- BackwardIndAll(act,tran_list,emit_act_array,tran_ind_vec,lepsilon)
+  alpha <- ForwardIndAll(act,init,tran_list,emit_act_array,tran_ind_vec,lepsilon, act_light_binom,log_sweights_vec)
+  beta <- BackwardIndAll(act,tran_list,emit_act_array,tran_ind_vec,lepsilon,act_light_binom)
 } else {
-  alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,lepsilon, log_sweights_vec)
-  beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,lepsilon)
+  alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,lepsilon, act_light_binom,log_sweights_vec)
+  beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,lepsilon,act_light_binom)
 }
 
 # apply(alpha[[2]][,,1]+beta[[2]][,,1],1,logSumExp)
@@ -1720,9 +1609,9 @@ while(abs(like_diff) > 1e-4){
   init <- CalcInit(alpha,beta,pi_l,T)
   
   if (RE_num == 0){
-    params_tran <- CalcTranBothC(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran,pi_l,F)
+    params_tran <- CalcTranBothC(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran,pi_l,lepsilon, act_light_binom,F)
   } else {
-    params_tran <- CalcTranBothC(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_l,T)
+    params_tran <- CalcTranBothC(alpha,beta,act,params_tran,emit_act,covar_mat_tran,pi_l,lepsilon,act_light_binom,T)
     
   }
   
@@ -1737,12 +1626,11 @@ while(abs(like_diff) > 1e-4){
   
   
   ################## Binom param 
-  # act_vec <- as.vector(act)
-  # lod_act_weight <- as.numeric(act_vec==log(epsilon))
-  # act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(1-weights_vec[!is.na(as.vector(act))])
-  # act_light_binom_ind <- colSums(act==lepsilon,na.rm = T)/colSums(1-weights_mat*!is.na(act),na.rm = T)
-  # act_light_binom_ind[act_light_binom_ind==0] <- .00001
-  # act_light_binom_ind[act_light_binom_ind>=1] <- .99999
+  act_vec <- as.vector(act)
+  lod_act_weight <- as.numeric(act_vec==log(epsilon))
+  act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(1-weights_vec[!is.na(as.vector(act))])
+  
+  lod_act_weight[!is.na(as.vector(act))] %*% (1-weights_vec)[!is.na(as.vector(act))]/sum(1-weights_vec[!is.na(as.vector(act))])
   
   ################## Emission Dist Param
   
@@ -1756,7 +1644,7 @@ while(abs(like_diff) > 1e-4){
     wake_means <- CalcMeansWake(act,weights_array)
     wake_sigma <- CalcSigmaWake(act,weights_array,wake_means)
     sleep_mean <- CalcMeanSleep(act,weights_mat,lepsilon)[[1]]
-    sleep_sigma <- CalcSigmaSleep(act,weights_mat,sleep_mean,lepsilon,T)
+    sleep_sigma <- CalcSigmaSleep(act,weights_mat,sleep_mean,lepsilon)
     
     emit_act[1,1,] <- wake_means
     emit_act[1,2,] <- wake_sigma
@@ -1772,8 +1660,8 @@ while(abs(like_diff) > 1e-4){
   } else {
     wake_means_ind <- CalcMeansWakeInd(act,weights_array)
     wake_sigma_ind <- CalcSigmaWakeInd(act,weights_array,wake_means_ind)
-    sleep_mean_ind <- CalcMeanSleep(act,weights_mat,lepsilon,T)[[1]]
-    sleep_sigma_ind <- CalcSigmaSleep(act,weights_mat,sleep_mean_ind,lepsilon,T)
+    sleep_mean_ind <- CalcMeanSleep(act,weights_mat,lepsilon)[[1]]
+    sleep_sigma_ind <- CalcSigmaSleep(act,weights_mat,sleep_mean_ind,lepsilon)
     
     emit_act_array[1,1,] <- wake_means_ind
     emit_act_array[1,2,] <- wake_sigma_ind
@@ -1795,11 +1683,11 @@ while(abs(like_diff) > 1e-4){
   
   
   if (RE_num==0){
-    alpha <- ForwardIndAll(act,init,tran_list,emit_act_array,tran_ind_vec,lepsilon, log_sweights_vec)
-    beta <- BackwardIndAll(act,tran_list,emit_act_array,tran_ind_vec,lepsilon)
+    alpha <- ForwardIndAll(act,init,tran_list,emit_act_array,tran_ind_vec,lepsilon, act_light_binom,log_sweights_vec)
+    beta <- BackwardIndAll(act,tran_list,emit_act_array,tran_ind_vec,lepsilon,act_light_binom)
   } else {
-    alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,lepsilon, log_sweights_vec)
-    beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,lepsilon)
+    alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,lepsilon, act_light_binom,log_sweights_vec)
+    beta <- BackwardC(act,tran_list,emit_act,tran_ind_vec,lepsilon,act_light_binom)
   }
   
   new_likelihood <- CalcLikelihood(alpha,pi_l)
@@ -1867,7 +1755,7 @@ if (fix_sim){
 
 if (!real_data){
   true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,pi_l_true_emp,clust_ind_true)
-  est_params <- list(init,params_tran,emit_act,act_light_binom_true_emp,pi_l,re_prob)
+  est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l,re_prob)
   mc_list <- list(mc,decoded_mat,total_acc,wake_acc,sleep_acc,perc_pred_wake,perc_pred_sleep)
   params_to_save <- list(true_params,est_params,likelihood_vec,mc_list,starting_conditions,tran_list,nap_acc)
   
@@ -1876,7 +1764,7 @@ if (!real_data){
   }
   
 } else {
-  est_params <- list(init,params_tran,emit_act,.05,pi_l,re_prob)
+  est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l,re_prob)
   params_to_save <- list(est_params,likelihood_vec,decoded_mat,starting_conditions,Tran2DF(params_tran))
   
   save(params_to_save,file = paste0("MHMM",RE_num,".rda"))
