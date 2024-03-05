@@ -31,19 +31,22 @@ Param2TranHelper <- function(p12,p21){
   tran[2,2] <- 1 - tran[2,1]
   return(tran)
 }
-
+  
 Params2Tran <- function(params_tran,time,index){
-  param_matrix <- matrix(params_tran,ncol=8,nrow=2, byrow = T)
+  
+  harmonic_ind <- ((index*2)-1)+6
+  #####by row is different here
+  param_matrix <- matrix(params_tran,ncol=18,nrow=2, byrow = T)
   if (index == 1){
-    tran <- Param2TranHelper(param_matrix[1,1]+param_matrix[1,7]*cos(2*pi*time/96)+
-                               param_matrix[1,8]*sin(2*pi*time/96),
-                             param_matrix[2,1]+param_matrix[2,7]*cos(2*pi*time/96)+
-                               param_matrix[2,8]*sin(2*pi*time/96))
+    tran <- Param2TranHelper(param_matrix[1,1]+param_matrix[1,7]*cos(2*pi*time/96)+param_matrix[1,8]*sin(2*pi*time/96),
+                             param_matrix[2,1]+param_matrix[2,7]*cos(2*pi*time/96)+param_matrix[2,8]*sin(2*pi*time/96))
   } else {
-    tran <- Param2TranHelper(param_matrix[1,1]+param_matrix[1,index]+param_matrix[1,7]*cos(2*pi*time/96)+
-                               param_matrix[1,8]*sin(2*pi*time/96),
-                             param_matrix[2,1]+param_matrix[2,index]+param_matrix[2,7]*cos(2*pi*time/96)+
-                               param_matrix[2,8]*sin(2*pi*time/96))
+    tran <- Param2TranHelper(param_matrix[1,1]+param_matrix[1,index]+
+                               (param_matrix[1,7]+param_matrix[1,harmonic_ind])*cos(2*pi*time/96)+
+                               (param_matrix[1,8]+param_matrix[1,harmonic_ind+1])*sin(2*pi*time/96),
+                             param_matrix[2,1]+param_matrix[2,index]+
+                               (param_matrix[2,7]+param_matrix[2,harmonic_ind])*cos(2*pi*time/96)+
+                               (param_matrix[2,8]+param_matrix[2,harmonic_ind+1])*sin(2*pi*time/96))
   }
   return(tran)
 }
@@ -80,7 +83,7 @@ file_length <- length(file_list)
 
 init_est_array <- matrix(0,2,file_length)
 
-tran_est_array <- array(0,dim = c(2,8,file_length))
+tran_est_array <- array(0,dim = c(2,18,file_length))
 
 act_est_array <- list(matrix(0,2,2))
 
@@ -153,6 +156,9 @@ act <- cbind(act_G,act_H)
  race_list <- c("Mexican American","Other Hispanic","NH White",
                "NH Black","NH Asian","Other Race - Including Multi-Racial")
 
+ race_list <- c("0-1","1-2","2-3",
+               "3-4","4-5","5+")
+
 Params2DFHelper <- function(tran_est_array,re_num){
   
   tran_vec <- sapply(c(1:96),FUN = Params2Tran,params_tran = tran_est_array[,,re_num],index=1)
@@ -192,12 +198,14 @@ tran_df_total <- Params2DF(tran_est_array)
 ggplot(tran_df_total %>% filter(type == "Sleep"), aes(x = time,y = prob, color = race)) + 
   geom_line() + 
   labs(title = "Probability of Falling Asleep by Hour", x = "Hour", y = "Probability of Falling Asleep") +
-  facet_wrap(vars(re_num))
+  facet_wrap(vars(re_num))+
+  scale_color_viridis(discrete=TRUE,end=.9) 
 
 ggplot(tran_df_total %>% filter(type == "Wake"), aes(x = time,y = prob, color = race)) + 
   geom_line() + 
   labs(title = "Probability of Waking by Hour", x = "Hour", y = "Probability of Waking") +
-  facet_wrap(vars(re_num))
+  facet_wrap(vars(re_num))+
+  scale_color_viridis(discrete=TRUE,end=.9) 
 ```
 
 ```{r}
@@ -277,7 +285,7 @@ act_decode_array <- simplify2array(act_decode_list)
 # inds <- which(test2 == max(test2,na.rm = T), arr.ind = TRUE)
 # tail(sort(table(inds[,2])),20)
 
-re_ind <- 6
+re_ind <- 5
 
 init <- init_est_array[,re_ind]
 params_tran <- tran_est_array[,,re_ind]
@@ -289,8 +297,9 @@ tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = par
 tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
 
 readCpp("Scripting/cFunctions.cpp")
+readCpp("../Scripting/cFunctions.cpp")
 
-alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,act_light_binom,lepsilon, log_sweights_vec)
+alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,lepsilon, log_sweights_vec)
 re_prob <- CalcProbRE(alpha,pi_l)
 
 sum(apply(re_prob,1, function(x) any(x > .5)))/dim(re_prob)[1]
@@ -329,12 +338,14 @@ class6 <- which(re_prob[,6] == max(re_prob[,1] ,na.rm = T), arr.ind = TRUE)
 # ind <- class6[7]
 # # # ind <- class6[9]
 
+###NEED TO FIX THIS WITH WITH ADDED MODELS
+
 DecodingPlots <- function(ind){
   decoded_df <- data.frame(decode = as.vector(act_decode_array[,ind,]),
-                           supportpoints = rep(c(1,2,3,4,5,6),each = 864),
-                           lwd = rep(seq(.5,.25,length = 6),each = 864),
-                           act = rep(act[,ind],6),
-                           time =rep(c(seq(as.POSIXct("2024-01-01"), as.POSIXct("2024-01-10"), by=60*15)[1:864]),6))
+                           supportpoints = rep(c(0,1,2,3,4,5,6,7,8),each = 864),
+                           lwd = rep(seq(.5,.25,length = 9),each = 864),
+                           act = rep(act[,ind],9),
+                           time =rep(c(seq(as.POSIXct("2024-01-01"), as.POSIXct("2024-01-10"), by=60*15)[1:864]),9))
   
   decoded_df$supportpoints <- as.factor(decoded_df$supportpoints)
   decoded_df$lwd <- as.factor(decoded_df$lwd)
@@ -444,6 +455,27 @@ plot_list <- DecodingPlots(100)
 plot_list[[1]]
 plot_list[[2]]
 
+```
+
+```{r}
+
+ggplot(tran_df_est %>% filter(type == "Sleep"), aes(x = time,y = prob, color = race)) + 
+  geom_line() + 
+  labs(title = "Probability of Falling Asleep by Hour", x = "Hour", y = "Probability of Falling Asleep") 
+
+ggplot(tran_df_true %>% filter(type == "Sleep"), aes(x = time,y = prob, color = race)) + 
+  geom_line() + 
+  labs(title = "Probability of Falling Asleep by Hour", x = "Hour", y = "Probability of Falling Asleep") 
+
+ggplot(tran_df_est %>% filter(type == "Wake"), aes(x = time,y = prob, color = race)) + 
+  geom_line() + 
+  labs(title = "Probability of Waking by Hour", x = "Hour", y = "Probability of Waking") +
+  ylim(c(0,.35))
+
+ggplot(tran_df_true %>% filter(type == "Wake"), aes(x = time,y = prob, color = race)) + 
+  geom_line() + 
+  labs(title = "Probability of Waking by Hour", x = "Hour", y = "Probability of Waking") +
+  ylim(c(0,.35))
 ```
 
 

@@ -4,13 +4,13 @@ sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
 
 real_data <- F
 
-epsilon <- .001
+epsilon <- 1e-5
 # epsilon <- 1e-100
 lepsilon <- log(epsilon)
-
+      
 # wake_params <- c(2.562106,.5992697)
 # sleep_params <- c(-1.1387,1.9459)
-
+ 
 wake_params <- c(2,1)
 sleep_params <- c(0,2)
 
@@ -23,7 +23,7 @@ print(paste("Sim Seed:",sim_num,"Size",sim_size,"RE type",RE_type,"Clust Num:",R
 
 fix_sim <- F
 
-if(is.na(RE_num)){RE_num <- 5}
+if(is.na(RE_num)){RE_num <- 0}
 if(is.na(sim_size)){sim_size <- 0}
 if(is.na(RE_type)){RE_type <- "norm"}
 
@@ -95,7 +95,8 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
   for (ind in 1:num_of_people){
     activity <- numeric(day_length)
     
-    act_lod_vec <- numeric(day_length)
+    act_lod_vec_wake <- numeric(day_length)
+    act_lod_vec_sleep <- numeric(day_length)
     
     tran_ind <- tran_ind_vec[ind]
     
@@ -113,13 +114,19 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
       
       if (hidden_states[i] == 1){
         
-        if (rbinom(1,1,act_light_binom[1]) == 1){
+        if (rbinom(1,1,act_light_binom[2]) == 1){
           activity[i] <- log(epsilon)
-          act_lod_vec[i] <- 1
+          act_lod_vec_sleep[i] <- 1
         } 
         
       } else {
         activity[i] <- activity[i] + re_vec[ind]
+        
+        if (rbinom(1,1,act_light_binom[1]) == 1){
+          activity[i] <- log(epsilon)
+          act_lod_vec_wake[i] <- 1
+        } 
+        
       }
     }
     
@@ -127,17 +134,20 @@ SimulateHMM <- function(day_length,num_of_people,init,params_tran,emit_act,
       hidden_states_matrix <- hidden_states
       nap_indicator_matrix <- nap_indicator
       activity_matrix <- activity
-      act_lod <- act_lod_vec
+      act_lod_sleep <- act_lod_vec_sleep
+      act_lod_wake <- act_lod_vec_wake
     } else {
       hidden_states_matrix <- cbind(hidden_states_matrix,hidden_states)
       nap_indicator_matrix <- cbind(nap_indicator_matrix,nap_indicator)
       activity_matrix <- cbind(activity_matrix,activity)
-      act_lod <- cbind(act_lod,act_lod_vec)
+      act_lod_sleep <- cbind(act_lod_sleep,act_lod_vec_sleep)
+      act_lod_wake <- cbind(act_lod_wake,act_lod_vec_wake)
     }
   }
   
   
-  return(list(hidden_states_matrix,activity_matrix,covar_mat_tran,act_lod,re_vec,nap_indicator_matrix))
+  return(list(hidden_states_matrix,activity_matrix,covar_mat_tran,list(act_lod_wake,act_lod_sleep),
+              re_vec,nap_indicator_matrix))
 }
 
 
@@ -149,12 +159,16 @@ logClassification <- function(time,current_state,act,emit_act,clust_i,act_light_
   if (!is.na(act[time])) {
     
     if (current_state == 0){
-      lognorm_dens <- log(dnorm(act[time],mu_act,sig_act)) 
+      if (act[time]==lepsilon){
+        lognorm_dens <- log(act_light_binom[1])
+      } else{
+        lognorm_dens <- log(1-act_light_binom[1])+dnorm(act[time],mu_act,sig_act,log = T)
+      } 
     } else {
       if (act[time]==lepsilon){
-        lognorm_dens <- log(act_light_binom)
+        lognorm_dens <- log(act_light_binom[2])
       } else{
-        lognorm_dens <- log(1-act_light_binom)+dnorm(act[time],mu_act,sig_act,log = T)
+        lognorm_dens <- log(1-act_light_binom[2])+dnorm(act[time],mu_act,sig_act,log = T)
       }
       
     }
@@ -1214,12 +1228,18 @@ CalcMeansWake <- function(act,weights_array){
   n <- dim(weights_array)[2]
   re_num <- dim(weights_array)[3]
   mean_vec <- numeric(re_num)
+  
+  leps_indicator <- (act==lepsilon)
+  leps_indicator[is.na(leps_indicator)] <- F
+  
   for (re_index in 1:re_num){
     num <- 0
     denom <- 0
     for (ind in 1:n){
       act_ind0 <- act[,ind] 
-      inds_keep <- !is.na(act_ind0)
+      
+      leps_ind <- leps_indicator[,ind]
+      inds_keep <- (!is.na(act_ind0) & !leps_ind)
       
       num <- num + (weights_array[inds_keep,ind,re_index]) %*% act_ind0[inds_keep]
       denom <- denom + sum(weights_array[inds_keep,ind,re_index])
@@ -1229,22 +1249,30 @@ CalcMeansWake <- function(act,weights_array){
   return(mean_vec)
 }
 
-CalcMeansWakeInd <- function(act,weights_array){
+CalcMeansWakeInd <- function(act,weights_array,old_means){
   n <- dim(weights_array)[2]
   mean_vec <- numeric(n)
+  
+  leps_indicator <- (act==lepsilon)
+  leps_indicator[is.na(leps_indicator)] <- F
+  
   for (ind in 1:n){
     act_ind0 <- act[,ind] 
-    inds_keep <- !is.na(act_ind0)
+    
+    leps_ind <- leps_indicator[,ind]
+    inds_keep <- (!is.na(act_ind0) & !leps_ind)
     
     num <- (weights_array[inds_keep,ind,1]) %*% act_ind0[inds_keep]
     denom <- sum(weights_array[inds_keep,ind,1])
     
     mean_vec[ind] <- num/denom
-    if(is.na(mean_vec[ind])){mean_vec[ind] <- 2}
+    if(is.na(mean_vec[ind])){mean_vec[ind] <- old_means[ind]}
   }
   
   return(mean_vec)
 }
+
+
 
 CalcSigmaWake <- function(act,weights_array,mean_vec){
   n <- dim(weights_array)[2]
@@ -1252,11 +1280,16 @@ CalcSigmaWake <- function(act,weights_array,mean_vec){
   num <- 0
   denom <- 0
   
+  leps_indicator <- (act==lepsilon)
+  leps_indicator[is.na(leps_indicator)] <- F
+  
   for (re_index in 1:re_num){
     for (ind in 1:n){
       
       resid0 <- (act[,ind]-mean_vec[re_index])
-      inds_keep <- !is.na(resid0)
+      
+      leps_ind <- leps_indicator[,ind]
+      inds_keep <- (!is.na(resid0) & !leps_ind)
       
       num <- num + (weights_array[inds_keep,ind,re_index]) %*% (resid0[inds_keep]^2)
       denom <- denom + sum(weights_array[inds_keep,ind,re_index])
@@ -1268,9 +1301,15 @@ CalcSigmaWake <- function(act,weights_array,mean_vec){
 CalcSigmaWakeInd <- function(act,weights_array,wake_means_ind,old_sigma){
   n <- dim(weights_array)[2]
   sigma_vec <- numeric(n)
+  
+  leps_indicator <- (act==lepsilon)
+  leps_indicator[is.na(leps_indicator)] <- F
+  
   for (ind in 1:n){
     resid0 <- (act[,ind]-wake_means_ind[ind])
-    inds_keep <- !is.na(resid0)
+    
+    leps_ind <- leps_indicator[,ind]
+    inds_keep <- (!is.na(resid0) & !leps_ind)
     
     num <- (weights_array[inds_keep,ind,1]) %*% (resid0[inds_keep]^2)
     denom <- sum(weights_array[inds_keep,ind,1])
@@ -1416,7 +1455,7 @@ emit_act_true_sim <- emit_act_true[,,1]
 emit_act_true_sim[1,1] <- central_mean
 
 #Prob of being below detection limit
-act_light_binom_true <- c(.1)
+act_light_binom_true <- c(.05,.15)
 # act_light_binom_true <- c(0)
 
 #### Simulate True Data ####
@@ -1466,7 +1505,8 @@ if (!real_data){
   ###NEED TO THINK ABOUT THIS MORE
   emit_act_true_emp <- emit_act_true
   
-  act_light_binom_true_emp <- c(sum(act_lod[mc==1]==1)/length(act_lod[mc==1]))
+  act_light_binom_true_emp <- c(sum(act_lod[[1]][mc==0]==1)/length(act_lod[[1]][mc==0]),
+                                sum(act_lod[[2]][mc==1]==1)/length(act_lod[[2]][mc==1]))
   
   pi_l_true_emp <- table(clust_ind_true)/ length(clust_ind_true)
   
@@ -1551,8 +1591,7 @@ emit_act[2,2,] <- emit_act[2,2,] + runif(1,-1/2,1/2)
 
 emit_act_array <- array(emit_act,dim=c(2,2,num_of_people))
 
-# act_light_binom <- c(runif(1,0,.1))
-act_light_binom <- .2
+act_light_binom <- act_light_binom_true
 
 pi_l <- pi_l_true + runif(length(pi_l_true),0,.25)
 pi_l <- pi_l/sum(pi_l)
@@ -1595,7 +1634,7 @@ like_diff <- new_likelihood - likelihood
 
 # grad_num <- grad(LogLike,params_tran)
 
-while(abs(like_diff) > 1e-4){
+while(abs(like_diff) > 1e-3){
   
   tic()
   start_time <- Sys.time()
@@ -1606,7 +1645,7 @@ while(abs(like_diff) > 1e-4){
   
   
   init <- CalcInit(alpha,beta,pi_l,T)
-  
+
   if (RE_num == 0){
     params_tran <- CalcTranBothC(alpha,beta,act,params_tran,emit_act_array,covar_mat_tran,pi_l,lepsilon, act_light_binom,F)
   } else {
@@ -1626,7 +1665,15 @@ while(abs(like_diff) > 1e-4){
   ################## Binom param 
   act_vec <- as.vector(act)
   lod_act_weight <- as.numeric(act_vec==log(epsilon))
-  act_light_binom[1] <- sum(lod_act_weight,na.rm = T)/sum(1-weights_vec[!is.na(as.vector(act))])
+  
+  r1 <- (act_light_binom[1]*sum(weights_vec[!is.na(as.vector(act))])) /
+    ((act_light_binom[1]*sum(weights_vec[!is.na(as.vector(act))])) +
+       (act_light_binom[2]*sum(1-weights_vec[!is.na(as.vector(act))])))
+
+
+  act_light_binom[1] <- (sum(lod_act_weight,na.rm = T) * r1)/sum(weights_vec[!is.na(as.vector(act))])
+  act_light_binom[2] <- (sum(lod_act_weight,na.rm = T) * (1-r1))/sum(1-weights_vec[!is.na(as.vector(act))])
+  
   ################## Emission Dist Param
   
   
@@ -1645,7 +1692,7 @@ while(abs(like_diff) > 1e-4){
     emit_act[1,2,] <- wake_sigma
     emit_act[2,1,] <- sleep_mean
     emit_act[2,2,] <- sleep_sigma
-    emit_act[,2,] <- abs(emit_act[,2,])
+    # emit_act[,2,] <- abs(emit_act[,2,])
     
     # if (any(is.na(wake_means))){
     #   print("NA Wake Means")

@@ -20,17 +20,16 @@ NumericVector vectorEqBool(NumericVector vec, double lod) {
 
 
 // [[Rcpp::export]]
-NumericVector logClassificationC(int current_state, NumericVector act_obs, double mu, double sig, double lod, double act_light_binom) {
+NumericVector logClassificationC(int current_state, NumericVector act_obs, double mu, double sig, double lod, NumericVector act_light_binom) {
 
 	
 	NumericVector temp;
+	NumericVector vec_eq = vectorEqBool(act_obs, lod);
+
 	if (current_state == 0) {
-		temp = Rcpp::dnorm( act_obs, mu, sig, true );
+		temp = ((log(1-act_light_binom(0)) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom(0))*vec_eq);	
 	} else {
-		NumericVector vec_eq = vectorEqBool(act_obs, lod);
-		temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom)*vec_eq);
-		//temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom + ((1-act_light_binom)*Rcpp::dnorm( act_obs, mu, sig, false )))*vec_eq);
-		
+		temp = ((log(1-act_light_binom(1)) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom(1))*vec_eq);	
 	}
 
 	LogicalVector nan_vec = is_na(act_obs);
@@ -47,14 +46,13 @@ NumericVector logClassificationC(int current_state, NumericVector act_obs, doubl
 }
 
 // [[Rcpp::export]]
-vec logClassificationC2(int current_state, NumericVector act_obs, double mu, double sig, double lod, double act_light_binom) {
+vec logClassificationC2(int current_state, NumericVector act_obs, double mu, double sig, double lod, NumericVector act_light_binom) {
   vec temp;
+  NumericVector vec_eq = vectorEqBool(act_obs, lod);
   if (current_state == 0) {
-    temp = Rcpp::dnorm( act_obs, mu, sig, true );
+    temp = ((log(1-act_light_binom(0)) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom(0))*vec_eq);
   } else {
-    NumericVector vec_eq = vectorEqBool(act_obs, lod);
-    temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom)*vec_eq);
-	//temp = ((log(1-act_light_binom) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom + ((1-act_light_binom)*Rcpp::dnorm( act_obs, mu, sig, false )))*vec_eq);
+    temp = ((log(1-act_light_binom(1)) + Rcpp::dnorm( act_obs, mu, sig, true )) * (1 - vec_eq)) + (log(act_light_binom(1))*vec_eq);
   }
 
   LogicalVector nan_vec = is_na(act_obs);
@@ -111,7 +109,7 @@ double logSumExpC(const arma::vec& x) {
 }
 
 // [[Rcpp::export]]
-mat ForwardIndC(const NumericVector& act_ind, NumericVector init, Rcpp::List tran_list, cube emit_act,int tran_ind, int clust_i, double lepsilon, double act_light_binom, double log_sweight){
+mat ForwardIndC(const NumericVector& act_ind, NumericVector init, Rcpp::List tran_list, cube emit_act,int tran_ind, int clust_i, double lepsilon, NumericVector act_light_binom, double log_sweight){
 
 	mat alpha( act_ind.length(), 2 );
 
@@ -148,7 +146,7 @@ mat ForwardIndC(const NumericVector& act_ind, NumericVector init, Rcpp::List tra
 }
 
 // [[Rcpp::export]]
-mat BackwardIndC(const NumericVector& act_ind, Rcpp::List tran_list, cube emit_act,int tran_ind, int clust_i, double lepsilon, double act_light_binom){
+mat BackwardIndC(const NumericVector& act_ind, Rcpp::List tran_list, cube emit_act,int tran_ind, int clust_i, double lepsilon, NumericVector act_light_binom){
   
   int n = act_ind.length(); 
   mat beta( n, 2 );
@@ -187,7 +185,7 @@ mat BackwardIndC(const NumericVector& act_ind, Rcpp::List tran_list, cube emit_a
 }
 
 // [[Rcpp::export]]
-List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube emit_act, NumericVector tran_ind_vec, double lepsilon, double act_light_binom, NumericVector log_sweights_vec){
+List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube emit_act, NumericVector tran_ind_vec, double lepsilon, NumericVector act_light_binom, NumericVector log_sweights_vec){
 	int num_people = act.ncol();
 	int len = act.nrow();
 	int num_re = emit_act.n_slices;
@@ -211,7 +209,7 @@ List ForwardC(const NumericMatrix& act, NumericVector init, List tran_list, cube
 }
 
 // [[Rcpp::export]]
-List BackwardC(const NumericMatrix& act, List tran_list, cube emit_act, NumericVector tran_ind_vec, double lepsilon, double act_light_binom){
+List BackwardC(const NumericMatrix& act, List tran_list, cube emit_act, NumericVector tran_ind_vec, double lepsilon, NumericVector act_light_binom){
 	int num_people = act.ncol();
 	int len = act.nrow();
 	int num_re = emit_act.n_slices;
@@ -233,7 +231,7 @@ List BackwardC(const NumericMatrix& act, List tran_list, cube emit_act, NumericV
 }  
 
 // [[Rcpp::export]]
-cube CalcTranHelperC(int init_state, int new_state, NumericMatrix act, List tran_list_mat, NumericVector tran_ind_vec, cube emit_act, NumericVector ind_like_vec, List alpha, List beta, double lepsilon, double act_light_binom, vec pi_l){
+cube CalcTranHelperC(int init_state, int new_state, NumericMatrix act, List tran_list_mat, NumericVector tran_ind_vec, cube emit_act, NumericVector ind_like_vec, List alpha, List beta, double lepsilon, NumericVector act_light_binom, vec pi_l){
   int num_people = act.ncol();
   int len = act.nrow();
   int num_re = emit_act.n_slices;
@@ -288,7 +286,7 @@ cube CalcTranHelperC(int init_state, int new_state, NumericMatrix act, List tran
 
 
 // [[Rcpp::export]]
-cube CalcTranIndHelperC(int init_state, int new_state, NumericMatrix act, List tran_list_mat, NumericVector tran_ind_vec, cube emit_act, NumericVector ind_like_vec, List alpha, List beta, double lepsilon, double act_light_binom, vec pi_l){
+cube CalcTranIndHelperC(int init_state, int new_state, NumericMatrix act, List tran_list_mat, NumericVector tran_ind_vec, cube emit_act, NumericVector ind_like_vec, List alpha, List beta, double lepsilon, NumericVector act_light_binom, vec pi_l){
   int num_people = act.ncol();
   int len = act.nrow();
   int num_re = 1;
