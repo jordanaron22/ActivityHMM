@@ -2,6 +2,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --mail-type=NONE
+#SBATCH --array=99
 #SBATCH --mail-user=aron0064@umn.edu
 #SBATCH -A mfiecas
 #SBATCH -o /panfs/jay/groups/29/mfiecas/aron0064/ActHMM/LogFiles/%A.out

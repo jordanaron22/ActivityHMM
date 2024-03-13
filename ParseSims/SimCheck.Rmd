@@ -205,7 +205,7 @@ ParseSingleSim <- function(path){
 }
 
 
-path_size <- "/Users/aronjr/Documents/Predoc/ActivityHMM/ParseSims/Sim/Mix1/Size3"
+path_size <- "/Users/aronjr/Documents/Predoc/ActivityHMM/ParseSims/Sim/Norm/Size1"
 SingleSim <- ParseSingleSim(path_size)  
 
 
@@ -259,8 +259,17 @@ SimBoxplot <- function(SingleSim,list_ind,est_ind,vec_ind1, inc_true,title,vec_i
   
   
   ggplot(final_df, aes(x=numberRE, y=estimates)) +
-    geom_boxplot() +
-    ggtitle(title)+coord_cartesian(ylim = quantile(final_df$estimates, c(0.025, 0.975)))
+    geom_boxplot(outlier.shape = NA) +
+    ggtitle(title)+
+    coord_cartesian(ylim = quantile(final_df$estimates, c(0.0125, 0.9875)))+ 
+    scale_x_discrete(breaks=c(c(0:8),"Truth"),
+        labels=c("Ind HMM",
+                 "Shared HMM","MHMM2","MHMM3",
+                 "MHMM4","MHMM5","MHMM6",
+                 "MHMM7","MHMM8","Truth")) +
+  theme(axis.text.x = element_text(angle=45, vjust = 1, hjust=1)) + 
+  xlab("") + 
+  ylab("Estimate")
 }
 
 TranPlot <- function(df,wake_sleep, diff = F){
@@ -399,7 +408,7 @@ SimScatter <- function(SingleSim){
   num_of_sims <- length(SingleSim)
   final_df <- data.frame()
   
-  for (sim_ind in 3:num_of_sims){
+  for (sim_ind in 2:num_of_sims){
     
     est <- SingleSim[[sim_ind]][[3]][[2]]
     nRE <- SingleSim[[sim_ind]][[8]]
@@ -424,8 +433,8 @@ SimScatter <- function(SingleSim){
   final_df$numberRE <- factor(final_df$numberRE,levels = c(sort(unique(final_df$numberRE))))
   
   
-  nre.labs <- c(paste(c(2:8), "Support Points"))
-  names(nre.labs) <- c(2:8)
+  nre.labs <- c(paste(c(1:8), "Support Points"))
+  names(nre.labs) <- c(1:8)
   
   ggplot(final_df, aes(y=mix, x=act)) +
     geom_point() + 
@@ -433,7 +442,7 @@ SimScatter <- function(SingleSim){
                labeller = labeller(numberRE = nre.labs)) +
     xlab("Wake Activity Cluster") + 
     ylab("Mixing Proportion") + 
-    ggtitle("MHMM Mixing Proportion by Wake Activity Cluster") + 
+    ggtitle("Mixing Proportion by Wake Cluster Mean for a MHMM with 1-8 Support Points") +
     theme_bw()
 }
     
@@ -457,22 +466,44 @@ tran_plots[[4]]
 
 
 
-grid.arrange(SimBoxplot(SingleSim,1,2,2,T,"Initial Probability"),
+g <- arrangeGrob(SimBoxplot(SingleSim,1,2,2,T,"Initial Sleep Probability"),
              SimBoxplot(SingleSim,3,2,1,T,"Wake Activity SE",2),
-             SimBoxplot(SingleSim,3,2,2,T,"Sleep Activity",1),
+             SimBoxplot(SingleSim,3,2,2,T,"Sleep Activity Mean",1),
              SimBoxplot(SingleSim,3,2,2,T,"Sleep Activity SE",2),
-             SimBoxplot(SingleSim,4,2,1,T,"Wake LoD"),
-             SimBoxplot(SingleSim,4,2,2,T,"Sleep LoD"),
+             SimBoxplot(SingleSim,4,2,1,T,"Wake Zero Inflated Probability"),
+             SimBoxplot(SingleSim,4,2,2,T,"Sleep Zero Inflated Probability"),
              ncol= 2)
+
+setwd("../Plots")
+ggsave("MiscParamBox.png",width = 9,height = 9,g)
 
 
 
 SimScatter(SingleSim)
+setwd("../Plots")
+ggsave("clustmeanmix.png",width = 9,height = 9)
 
 
-
+SimBoxplot(SingleSim,3,2,1,T,"Wake Activity SE",2)
 
 # SimBoxplot(SingleSim,6,2,0,F,"Likelihood Step Decreases")
+
+```
+
+```{r}
+SimBoxplot(SingleSim,3,2,1,T,"Wake Activity SE",2) + 
+  labs(y="Standard Error",
+       x="Model",
+       title = "Wake Activity SE by Model")  + 
+  scale_x_discrete(breaks=c(c(0:8),"Truth"),
+        labels=c("Ind HMM",
+                 "Shared HMM","MHMM2","MHMM3",
+                 "MHMM4","MHMM5","MHMM6",
+                 "MHMM7","MHMM8","Truth")) +
+  theme(axis.text.x = element_text(angle=45, vjust = 1, hjust=1))
+
+setwd("../Plots")
+ggsave("wakeactSE.png",width = 4,height = 4)
 ```
 
 
