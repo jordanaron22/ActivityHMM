@@ -1,8 +1,9 @@
 set_seed <- T
 sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
+
 # sim_num <- 1
 
-real_data <- F
+real_data <- T
 
 epsilon <- 1e-5
 # epsilon <- 1e-100
@@ -15,6 +16,9 @@ wake_params <- c(2,1)
 sleep_params <- c(0,2)
 
 obs_per_day <- 96
+
+if (is.na(sim_num)){sim_num <- 99}
+if (set_seed){set.seed(sim_num)}
 
 RE_num <- as.numeric(commandArgs(TRUE)[1])
 sim_size <- as.numeric(commandArgs(TRUE)[2])
@@ -1385,6 +1389,35 @@ TranIndList <- function(params_tran_mat,obs_per_day,num_of_people){
   return(tran_ind_list)
 }
 
+
+CalcBIC <- function(new_likelihood,RE_num,act){
+  
+  if (real_data){ reg_param <- 36}
+  if (!real_data){reg_param <- 18}
+  
+  if (RE_num > 0 ){
+    num_of_param <- RE_num + 3 + 2 + reg_param
+  } else {
+    num_of_param <- dim(act)[2] + 3 + 2 + reg_param
+  }
+  bic <- num_of_param * log(sum(!is.na(act))) - (2 * new_likelihood)
+  return(bic)
+}
+
+CalcAIC <- function(new_likelihood,RE_num,act){
+  
+  if (real_data){ reg_param <- 36}
+  if (!real_data){reg_param <- 18}
+  
+  if (RE_num > 0 ){
+    num_of_param <- RE_num + 3 + 2 + reg_param
+  } else {
+    num_of_param <- dim(act)[2] + 3 + 2 + reg_param
+  }
+  bic <- (2 * num_of_param) - (2 * new_likelihood)
+  return(bic)
+}
+
 #### User Settings Start Here ####
 
 
@@ -1461,9 +1494,6 @@ act_light_binom_true <- c(.05,.15)
 #### Simulate True Data ####
 
 if (!real_data){
-  if (is.na(sim_num)){sim_num <- 99}
-  if (set_seed){set.seed(sim_num)}
-  
   if (sim_size == 0){
     day_length <- 96 
     num_of_people <- 1000
@@ -1541,12 +1571,22 @@ if(real_data){
   
   log_sweights_vec <- c(log_sweights_vec_G/2,log_sweights_vec_H/2)
   
+  
+  id <- id %>% mutate(age_disc = case_when(age <= 10 ~ 1,
+                                     age <=20 & age > 10 ~ 2,
+                                     age <=35 & age > 20 ~ 3,
+                                     age <=50 & age > 35 ~ 4,
+                                     age <=65 & age > 50 ~ 5,
+                                     age > 65 ~ 6))
+  
   #CHANGE RACE AND POV
-  covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$poverty))
+  covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$age_disc))
   covar_mat_tran[,1] <- 1
-  for (i in 1:length(id$poverty)){
-    covar_mat_tran[i,id$poverty[i]] <- 1
+  for (i in 1:length(id$age_disc)){
+    covar_mat_tran[i,id$age_disc[i]] <- 1
   } 
+  
+  
   
   tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
   
@@ -1666,13 +1706,9 @@ while(abs(like_diff) > 1e-3){
   act_vec <- as.vector(act)
   lod_act_weight <- as.numeric(act_vec==log(epsilon))
   
-  r1 <- (act_light_binom[1]*sum(weights_vec[!is.na(as.vector(act))])) /
-    ((act_light_binom[1]*sum(weights_vec[!is.na(as.vector(act))])) +
-       (act_light_binom[2]*sum(1-weights_vec[!is.na(as.vector(act))])))
-
-
-  act_light_binom[1] <- (sum(lod_act_weight,na.rm = T) * r1)/sum(weights_vec[!is.na(as.vector(act))])
-  act_light_binom[2] <- (sum(lod_act_weight,na.rm = T) * (1-r1))/sum(1-weights_vec[!is.na(as.vector(act))])
+  
+  act_light_binom[1] <- sum(lod_act_weight *weights_vec,na.rm=T)/sum(weights_vec[!is.na(as.vector(act))])
+  act_light_binom[2] <- sum(lod_act_weight *(1-weights_vec),na.rm=T)/sum(1-weights_vec[!is.na(as.vector(act))])
   
   ################## Emission Dist Param
   
@@ -1700,7 +1736,7 @@ while(abs(like_diff) > 1e-3){
     # }
     
   } else {
-    wake_means_ind <- CalcMeansWakeInd(act,weights_array)
+    wake_means_ind <- CalcMeansWakeInd(act,weights_array,emit_act_array[1,1,])
     wake_sigma_ind <- CalcSigmaWakeInd(act,weights_array,wake_means_ind,emit_act_array[1,2,])
     sleep_mean_ind <- CalcMeanSleep(act,weights_mat,lepsilon)[[1]]
     sleep_sigma_ind <- CalcSigmaSleep(act,weights_mat,sleep_mean_ind,lepsilon)
@@ -1789,17 +1825,16 @@ if (!real_data){
   tran_list <- list(tran_df,tran_sum_df)
 }
 
-nap_acc <- NA
-if (fix_sim){
-  nap_acc <- sum(decoded_mat == 1 & mc ==1 & nap_indicator_true== 1)/sum(mc ==1 & nap_indicator_true== 1)
-  
-}
+aic <- CalcAIC(new_likelihood,RE_num,act)
+bic <- CalcBIC(new_likelihood,RE_num,act)
+
+IC <- c(aic,bic)
 
 if (!real_data){
   true_params <- list(init_true_emp,params_tran_true,emit_act_true_emp,act_light_binom_true_emp,pi_l_true_emp,clust_ind_true)
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l,re_prob)
   mc_list <- list(mc,decoded_mat,total_acc,wake_acc,sleep_acc,perc_pred_wake,perc_pred_sleep)
-  params_to_save <- list(true_params,est_params,likelihood_vec,mc_list,starting_conditions,tran_list,nap_acc)
+  params_to_save <- list(true_params,est_params,likelihood_vec,mc_list,starting_conditions,tran_list,IC)
   
   if(sim_size != 0){
     save(params_to_save,file = paste0(RE_type,RE_num,"Size",sim_size,"Seed",sim_num,".rda"))
@@ -1807,7 +1842,7 @@ if (!real_data){
   
 } else {
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l,re_prob)
-  params_to_save <- list(est_params,likelihood_vec,decoded_mat,starting_conditions,Tran2DF(params_tran))
+  params_to_save <- list(est_params,likelihood_vec,decoded_mat,starting_conditions,Tran2DF(params_tran),IC)
   
   save(params_to_save,file = paste0("MHMM",RE_num,".rda"))
 }
