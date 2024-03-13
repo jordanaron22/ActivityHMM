@@ -54,3 +54,6 @@ mv *6Size4*.rda c6
 mv *7Size4*.rda c7
 mv *8Size4*.rda c8
 cd ../
+
+
+squeue -u aron0064 -h -t pending,running -r | wc -l

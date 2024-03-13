@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, echo =FALSE}
 library(dplyr)
+library(tidyr)
 library(ggplot2)
 library(cowplot)
 library(gridExtra)
@@ -36,7 +37,7 @@ Params2Tran <- function(params_tran,time,index){
   
   harmonic_ind <- ((index*2)-1)+6
   #####by row is different here
-  param_matrix <- matrix(params_tran,ncol=18,nrow=2, byrow = T)
+  param_matrix <- matrix(params_tran,ncol=18,nrow=2, byrow = F)
   if (index == 1){
     tran <- Param2TranHelper(param_matrix[1,1]+param_matrix[1,7]*cos(2*pi*time/96)+param_matrix[1,8]*sin(2*pi*time/96),
                              param_matrix[2,1]+param_matrix[2,7]*cos(2*pi*time/96)+param_matrix[2,8]*sin(2*pi*time/96))
@@ -77,7 +78,7 @@ Tran2DF <- function(params_tran){
   return(tran_df)
 }
   
-setwd("Routputs")
+setwd("Routputs/")
 file_list <- list.files()
 file_length <- length(file_list)
 
@@ -87,7 +88,7 @@ tran_est_array <- array(0,dim = c(2,18,file_length))
 
 act_est_array <- list(matrix(0,2,2))
 
-binom_est_array <- matrix(0,1,file_length)
+binom_est_array <- matrix(0,2,file_length)
 
 pi_est_array <- list(numeric(2))
 
@@ -99,8 +100,10 @@ for (file_ind in 1:file_length){
 
   init_est_array[,file_ind] <- params_to_save[[1]][[1]]
 
-  tran_est_array[,,file_ind] <- params_to_save[[1]][[2]]
+  # tran_est_array[,,file_ind] <- params_to_save[[1]][[2]]
+  tran_est_array[,,file_ind] <- matrix(params_to_save[[1]][[2]],2,18,byrow = T) 
 
+  
   act_est_array[length(act_est_array)+1] <- list(params_to_save[[1]][[3]])
 
   binom_est_array[,file_ind] <- params_to_save[[1]][[4]]
@@ -133,13 +136,20 @@ log_sweights_vec_H <- log(id_H[,3])
 
 log_sweights_vec <- c(log_sweights_vec_G/2,log_sweights_vec_H/2)
 
-#CHANGE RACE AND POV
-covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$poverty))
-covar_mat_tran[,1] <- 1
-for (i in 1:length(id$poverty)){
-  covar_mat_tran[i,id$poverty[i]] <- 1
-} 
+id <- id %>% mutate(age_disc = case_when(age <= 10 ~ 1,
+                                   age <=20 & age > 10 ~ 2,
+                                   age <=35 & age > 20 ~ 3,
+                                   age <=50 & age > 35 ~ 4,
+                                   age <=65 & age > 50 ~ 5,
+                                   age > 65 ~ 6))
 
+#CHANGE RACE AND POV
+covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$age_disc))
+covar_mat_tran[,1] <- 1
+for (i in 1:length(id$age_disc)){
+  covar_mat_tran[i,id$age_disc[i]] <- 1
+} 
+tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
 epsilon <- 1e-3
 act_G <- log(wave_data_G[[1]] + epsilon)
 act_H <- log(wave_data_H[[1]] + epsilon)
@@ -192,23 +202,32 @@ Params2DF <- function(tran_est_array){
   }
   return(tran_df)
 }
+```
+
+```{r,fig.width=7.5}
+
+nre.labs <- c("Ind HMM","Shared HMM",paste(c(2:8), "Support Points"))
+names(nre.labs) <- c(1:9)
 
 tran_df_total <- Params2DF(tran_est_array)
+# tran_df_total<- Params2DFHelper(tran_est_array,1)
 
 ggplot(tran_df_total %>% filter(type == "Sleep"), aes(x = time,y = prob, color = race)) + 
   geom_line() + 
-  labs(title = "Probability of Falling Asleep by Hour", x = "Hour", y = "Probability of Falling Asleep") +
-  facet_wrap(vars(re_num))+
+  labs(title = "Probability of Falling Asleep by Hour", x = "Hour", 
+       y = "Probability of Falling Asleep",color = "Income to Poverty \nLine Ratio") +
+  facet_wrap(vars(re_num),labeller = labeller(re_num = nre.labs))+
   scale_color_viridis(discrete=TRUE,end=.9) 
 
 ggplot(tran_df_total %>% filter(type == "Wake"), aes(x = time,y = prob, color = race)) + 
   geom_line() + 
-  labs(title = "Probability of Waking by Hour", x = "Hour", y = "Probability of Waking") +
-  facet_wrap(vars(re_num))+
+  labs(title = "Probability of Waking by Hour", x = "Hour", 
+       y = "Probability of Falling Asleep",color = "Income to Poverty \nLine Ratio") +
+  facet_wrap(vars(re_num),labeller = labeller(re_num = nre.labs))+
   scale_color_viridis(discrete=TRUE,end=.9) 
 ```
 
-```{r}
+```{r,fig.width=7.5}
 
 mixing_df <- data.frame()
 for (re_num in 1:length(pi_est_array)){
@@ -221,9 +240,9 @@ for (re_num in 1:length(pi_est_array)){
 
   
 
-ggplot(mixing_df, aes(x=mix, y=mean)) + 
+ggplot(mixing_df, aes(y=mix, x=mean)) + 
   geom_point() +
-  facet_wrap(vars(re_num)) + 
+  facet_wrap(vars(re_num),labeller = labeller(re_num = nre.labs))+
   labs(x = "Mixing Proportion",
        y = "Wake Activity Mean",
        title = "Wake Activity Mean by Mixing Proportion by # of Support Points")
@@ -242,11 +261,11 @@ ScatterByRE <- function(est_array,ind1,ind2){
     
     if (is.integer(dim(est_array[[1]]))){
       scatter_df_working <- data.frame(est = mean(est_array[[re_num]][ind1,ind2,]),
-                              re_num = re_num)
+                              re_num = re_num-1)
     } else {
       
       scatter_df_working <- data.frame(est = est_array[[re_num]],
-                              re_num = re_num)
+                              re_num = re_num-1)
       
     }
       
@@ -285,12 +304,12 @@ act_decode_array <- simplify2array(act_decode_list)
 # inds <- which(test2 == max(test2,na.rm = T), arr.ind = TRUE)
 # tail(sort(table(inds[,2])),20)
 
-re_ind <- 5
+re_ind <- 6
 
 init <- init_est_array[,re_ind]
 params_tran <- tran_est_array[,,re_ind]
 emit_act <- act_est_array[[re_ind]]
-act_light_binom <- binom_est_array[re_ind]
+act_light_binom <- binom_est_array[,re_ind]
 pi_l <- pi_est_array[[re_ind]]
 
 tran_list <- lapply(c(1:dim(covar_mat_tran)[2]),TranByTimeVec, params_tran = params_tran, time_vec = c(1:obs_per_day))
@@ -299,7 +318,7 @@ tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
 readCpp("Scripting/cFunctions.cpp")
 readCpp("../Scripting/cFunctions.cpp")
 
-alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,lepsilon, log_sweights_vec)
+alpha <- ForwardC(act,init,tran_list,emit_act,tran_ind_vec,lepsilon,act_light_binom, log_sweights_vec)
 re_prob <- CalcProbRE(alpha,pi_l)
 
 sum(apply(re_prob,1, function(x) any(x > .5)))/dim(re_prob)[1]
@@ -312,7 +331,7 @@ sum(apply(re_prob,1, function(x) any(x > .99)))/dim(re_prob)[1]
 
 class1 <- which(re_prob[,1] == max(re_prob[,1] ,na.rm = T), arr.ind = TRUE)
 class2 <- which(re_prob[,2] == max(re_prob[,2] ,na.rm = T), arr.ind = TRUE)
-class3 <- which(re_prob[,3] == max(re_prob[,1] ,na.rm = T), arr.ind = TRUE)
+class3 <- which(re_prob[,3] == max(re_prob[,3] ,na.rm = T), arr.ind = TRUE)
 class6 <- which(re_prob[,6] == max(re_prob[,1] ,na.rm = T), arr.ind = TRUE)
 ```
 
@@ -340,35 +359,39 @@ class6 <- which(re_prob[,6] == max(re_prob[,1] ,na.rm = T), arr.ind = TRUE)
 
 ###NEED TO FIX THIS WITH WITH ADDED MODELS
 
+model_vec <- c(0,1,2,3,4,5,6,7,8)
+model_vec <- c(1)
+
 DecodingPlots <- function(ind){
   decoded_df <- data.frame(decode = as.vector(act_decode_array[,ind,]),
-                           supportpoints = rep(c(0,1,2,3,4,5,6,7,8),each = 864),
-                           lwd = rep(seq(.5,.25,length = 9),each = 864),
-                           act = rep(act[,ind],9),
-                           time =rep(c(seq(as.POSIXct("2024-01-01"), as.POSIXct("2024-01-10"), by=60*15)[1:864]),9))
+                           supportpoints = rep(model_vec,each = 864),
+                           lwd = rep(seq(.5,.25,length = length(model_vec)),each = 864),
+                           act = rep(act[,ind],length(model_vec)),
+                           time =rep(c(seq(as.POSIXct("2024-01-01"), as.POSIXct("2024-01-10"), by=60*15)[1:864]),length(model_vec)))
   
   decoded_df$supportpoints <- as.factor(decoded_df$supportpoints)
   decoded_df$lwd <- as.factor(decoded_df$lwd)
   
   
   # decoded_df <- decoded_df[97:768,]
-  decoded_df1 <- decoded_df[1:864,]
-  decoded_df6 <- decoded_df[4321:5184,]
+  decoded_df0 <- decoded_df[1:864,]
+  decoded_df1 <- decoded_df[865:1728,]
+  decoded_df6 <- decoded_df[6049:6912,]
   # decoded_df <- decoded_df[c(1:864,4321:5184),]
   
-  p <- ggplot(decoded_df, aes(x=time, y=decode), size =lwd) +
-    geom_line(aes(color = supportpoints,linetype = supportpoints)) +
-    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
-                     date_labels="%H:%M")+
-    theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) + 
-    scale_y_continuous(breaks=c(0,1), label = c("Wake","Sleep")) +
-    scale_color_viridis(discrete=TRUE,end=.95) + 
-    labs(x = "Time",
-         y="",
-         title = "Viterbi Decoding by # of Support Points",
-         linetype = "Support Points",
-         color = "Support Points")
+  # p <- ggplot(decoded_df, aes(x=time, y=decode), size =lwd) +
+  #   geom_line(aes(color = supportpoints,linetype = supportpoints)) +
+  #   scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+  #                    date_labels="%H:%M")+
+  #   theme_bw() +
+  #   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) + 
+  #   scale_y_continuous(breaks=c(0,1), label = c("Wake","Sleep")) +
+  #   scale_color_viridis(discrete=TRUE,end=.95) + 
+  #   labs(x = "Time",
+  #        y="",
+  #        title = "Viterbi Decoding by # of Support Points",
+  #        linetype = "Support Points",
+  #        color = "Support Points") 
   
   g <- ggplot(decoded_df, aes(x=time, y=act)) +
     geom_point() +
@@ -380,6 +403,21 @@ DecodingPlots <- function(ind){
          y = "Acitivity (MIMS)",
          title = "Activity by Time")
   
+  p0 <- ggplot(decoded_df0, aes(x=time, y=decode)) +
+    geom_path(color = viridis(7)[1]) +
+    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+                     date_labels="%H:%M")+
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = .5, vjust = 0.5))+
+    theme(legend.position = "none") + 
+    scale_y_continuous(breaks=c(0,1), label = c("Wake","Sleep"))+
+    labs(x = "Time",
+         y="",
+         title = "Individual HMM",
+         linetype = "Support Points",
+         color = "Support Points") + 
+    theme(plot.margin = unit(c(0, 0, 0, 0), "cm"))
+  
   p1 <- ggplot(decoded_df1, aes(x=time, y=decode)) +
     geom_path(color = viridis(7)[1]) +
     scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
@@ -390,9 +428,11 @@ DecodingPlots <- function(ind){
     scale_y_continuous(breaks=c(0,1), label = c("Wake","Sleep"))+
     labs(x = "Time",
          y="",
-         title = "Standard HMM",
+         title = "Shared HMM",
          linetype = "Support Points",
-         color = "Support Points")
+         color = "Support Points") + 
+    theme(plot.margin = unit(c(0, 0, 0, 0), "cm"))
+    
   
   p6 <- ggplot(decoded_df6, aes(x=time, y=decode)) +
     geom_path(color = viridis(7)[1]) +
@@ -404,78 +444,154 @@ DecodingPlots <- function(ind){
     scale_y_continuous(breaks=c(0,1), label = c("Wake","Sleep"))+
     labs(x = "Time",
          y="",
-         title = "6 Support Points",
+         title = "7 Support Points",
          linetype = "Support Points",
-         color = "Support Points")
+         color = "Support Points")+ 
+    theme(plot.margin = unit(c(0, 0, 0, 0), "cm"))
   
-  
-  plot_list <- list()
-  plot_list[[1]] <- plot_grid(p,g,ncol=1, align = "hv",axis = "tblr")
-  plot_list[[2]] <- plot_grid(p1,p6, label_size = 10,ncol=1, align = "hv",axis = "tblr",hjust = -2,vjust = 4)
-  return(plot_list)
+  return(plot_grid(p1,p0,p6,g, label_size = 10,ncol=1, align = "hv",axis = "tblr",hjust = -2,vjust = 4))
 }
 
 ```
 
-```{r}
+```{r,fig.height=7.5}
 #Cluster 1
 #Small diff btwn sleep and wake activity
-plot_list <- DecodingPlots(170)
-plot_list[[1]]
-plot_list[[2]]
+DecodingPlots(170)
   
 
 #Cluster 2
 #Smallish diff btwn sleep and wake activity
-plot_list <- DecodingPlots(7)
-plot_list[[1]]
-plot_list[[2]]
+DecodingPlots(7)
 
 #Cluster 3
 #Medium diff btwn sleep and wake activity
 #Heavy sleeper
-plot_list <- DecodingPlots(1183)
-plot_list[[1]]
-plot_list[[2]]
+DecodingPlots(1183)
 
 
-#Cluster 6
-#Large diff btwn sleep and wake activity
-plot_list <- DecodingPlots(135)
-plot_list[[1]]
-plot_list[[2]]
+# #Cluster 6
+# #Large diff btwn sleep and wake activity
+# DecodingPlots(135)
 
-plot_list <- DecodingPlots(11)
-plot_list[[1]]
-plot_list[[2]]
+# DecodingPlots(11)
 
 
 
-plot_list <- DecodingPlots(100)
-plot_list[[1]]
-plot_list[[2]]
+DecodingPlots(100)
+
+
+
+DecodingPlots(2433)
+
+
+DecodingPlots(132)
+
+
+DecodingPlots(9)
+
+DecodingPlots(13637)
+
 
 ```
+
 
 ```{r}
+full_data_ind <- which(colSums(!is.na(act)) > 750)
+tran_ind_vec2 <- tran_ind_vec[full_data_ind]
+n <- dim(act)[2]
+final_df <- data.frame()
 
-ggplot(tran_df_est %>% filter(type == "Sleep"), aes(x = time,y = prob, color = race)) + 
-  geom_line() + 
-  labs(title = "Probability of Falling Asleep by Hour", x = "Hour", y = "Probability of Falling Asleep") 
+#NEED TO DEAL WITH MISSING DATA
 
-ggplot(tran_df_true %>% filter(type == "Sleep"), aes(x = time,y = prob, color = race)) + 
-  geom_line() + 
-  labs(title = "Probability of Falling Asleep by Hour", x = "Hour", y = "Probability of Falling Asleep") 
 
-ggplot(tran_df_est %>% filter(type == "Wake"), aes(x = time,y = prob, color = race)) + 
-  geom_line() + 
-  labs(title = "Probability of Waking by Hour", x = "Hour", y = "Probability of Waking") +
-  ylim(c(0,.35))
+# vit_ind <- act_decode_array[c(49:816),ind,model]
+tic()
+for (model_ind in 1:1){
+  sleep_block_vec <- c()
+  sleep_eff_vec <- c()
+  sleep_onset_vec <- c()
+  sleep_total_vec <- c()
+  
+  for (ind in full_data_ind){
+    
+    vit_ind <- act_decode_array[,ind,model_ind]
+    len <- length(vit_ind)
+  
+    day_len <- 8
+    sleep_block_ind_vec <- c()
+    sleep_eff_ind_vec <- c()
+    sleep_onset_ind_vec <- c()
+    sleep_total_ind_vec <- c()
+    
+    for(day in 1:day_len){
+      start_ind <- 81 + (96*(day-1))
+      stop_ind <- 48 + (96*day)
+      vit_ind_day <- vit_ind[start_ind:stop_ind]
+      
+      
+      sleep_times <- which(vit_ind_day == 1)
+      
+      sleep_block <- sleep_times[length(sleep_times)] - sleep_times[1] + 1
+      sleep_eff <- length(sleep_times)/sleep_block
+      sleep_onset <- sleep_times[1] + 80
+      sleep_total <- sum(vit_ind_day == 1)
+      
+      
+      if (length(sleep_times)==0){
+        sleep_block <- 0
+        sleep_eff <- 0
+        sleep_onset <- 0
+      }
+      
+      if (sum(is.na(act[start_ind:stop_ind,ind]))>32){
+        sleep_block <- NA
+        sleep_eff <- NA
+        sleep_onset <- NA
+        sleep_total <- NA
+      }
+      
+      sleep_block_ind_vec <- c(sleep_block_ind_vec,sleep_block)
+      sleep_eff_ind_vec <- c(sleep_eff_ind_vec,sleep_eff)
+      sleep_onset_ind_vec <- c(sleep_onset_ind_vec, sleep_onset)
+      sleep_total_ind_vec <- c(sleep_total_ind_vec, sleep_total)
+    } 
+    
+    sleep_block_vec <- c(sleep_block_vec,median(sleep_block_ind_vec,na.rm = T))
+    sleep_eff_vec <- c(sleep_eff_vec,median(sleep_eff_ind_vec,na.rm = T))
+    sleep_onset_vec <- c(sleep_onset_vec,median(sleep_onset_ind_vec,na.rm = T))
+    sleep_total_vec <- c(sleep_total_vec,sum(sleep_total_ind_vec))
+  }
+  
+  
+  working_df <- data.frame(block = sleep_block_vec,
+                         eff = sleep_eff_vec,
+                         modelnum = model_ind,
+                         onset = sleep_onset_vec,
+                         totalSleep = sleep_total_vec,
+                         pov = tran_ind_vec2)
+  final_df <- rbind(final_df,working_df)
+}
+  
 
-ggplot(tran_df_true %>% filter(type == "Wake"), aes(x = time,y = prob, color = race)) + 
-  geom_line() + 
-  labs(title = "Probability of Waking by Hour", x = "Hour", y = "Probability of Waking") +
-  ylim(c(0,.35))
+
+sleep_df <- final_df
+sleep_df$modelnum <- as.factor(sleep_df$modelnum)
+sleep_df$pov <- as.factor(sleep_df$pov)
+
+# sleep_df <- sleep_df %>% filter(modelnum == 7)
+
+ggplot(sleep_df, aes(x=pov, y=onset)) + 
+  geom_boxplot()
+
+
+sleep_df %>%
+    # Specify group indicator, column, function
+    group_by(pov) %>%
+    # Calculate the mean of the "Frequency" column for each group
+    summarise_at(c("block", "onset", "eff", "totalSleep"), mean, na.rm = TRUE)
+
 ```
+
 
 
