@@ -2,6 +2,7 @@ set_seed <- T
 sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
 if (is.na(sim_num)){sim_num <- 99}
 
+
 real_data <- F
 
 epsilon <- 1e-5
