@@ -118,6 +118,8 @@ ParseSingleClust <- function(folder, path_size ){
   neg_step <- c()
   
   vit_array <- matrix(0,5,length(file_list))
+  vit_array2 <- matrix(0,5,length(file_list))
+  vit_array3 <- matrix(0,5,length(file_list))
   
   time_array <- matrix(0,1,length(file_list))
   
@@ -175,6 +177,36 @@ ParseSingleClust <- function(folder, path_size ){
     
     IC_est_array[,file_ind] <- params_to_save[[7]]
     
+    ############
+    
+    clust_ind_true <- params_to_save[[1]][[6]]
+    q1_ind <- clust_ind_true < 0
+    
+    decoded_mat_q1 <- params_to_save[[4]][[2]][,q1_ind]
+    mc_q1 <- params_to_save[[4]][[1]][,q1_ind]
+    
+    vit_array2[1,file_ind] <- (sum(decoded_mat_q1 == 0 & mc_q1 ==0) + sum(decoded_mat_q1 == 1 & mc_q1 ==1))/(prod(dim(decoded_mat_q1)))
+    vit_array2[2,file_ind] <- sum(decoded_mat_q1 == 0 & mc_q1 ==0)/sum(mc_q1 ==0)
+    vit_array2[3,file_ind] <- sum(decoded_mat_q1 == 1 & mc_q1 ==1)/sum(mc_q1 ==1)
+  
+    vit_array2[4,file_ind] <- sum(decoded_mat_q1 == 0 & mc_q1 ==0)/sum(decoded_mat_q1 ==0)
+    vit_array2[5,file_ind] <- sum(decoded_mat_q1 == 1 & mc_q1 ==1)/sum(decoded_mat_q1 == 1) 
+    
+    ############
+    
+    clust_ind_true <- params_to_save[[1]][[6]]
+    q2_ind <- clust_ind_true > 0
+    
+    decoded_mat_q2 <- params_to_save[[4]][[2]][,q2_ind]
+    mc_q2 <- params_to_save[[4]][[1]][,q2_ind]
+    
+    vit_array3[1,file_ind] <- (sum(decoded_mat_q2 == 0 & mc_q2 ==0) + sum(decoded_mat_q2 == 1 & mc_q2 ==1))/(prod(dim(decoded_mat_q2)))
+    vit_array3[2,file_ind] <- sum(decoded_mat_q2 == 0 & mc_q2 ==0)/sum(mc_q2 ==0)
+    vit_array3[3,file_ind] <- sum(decoded_mat_q2 == 1 & mc_q2 ==1)/sum(mc_q2 ==1)
+  
+    vit_array3[4,file_ind] <- sum(decoded_mat_q2 == 0 & mc_q2 ==0)/sum(decoded_mat_q2 ==0)
+    vit_array3[5,file_ind] <- sum(decoded_mat_q2 == 1 & mc_q2 ==1)/sum(decoded_mat_q2 == 1) 
+    
   }
   
   act_true_array[1,1,,] <- 0
@@ -209,7 +241,9 @@ ParseSingleClust <- function(folder, path_size ){
               vit_array,
               init_cond,
               time_array,
-              IC_est_array))
+              IC_est_array,
+              vit_array2,
+              vit_array3))
   
   setwd("..")
 }
@@ -291,6 +325,7 @@ for (dist_ind in 1:dist_num){
     for (clust_ind in 1:(clust_num+1)){
       nRE <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[8]]
       vit_med <- apply(MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[9]],1,median)
+      # vit_med <- apply(MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[13]],1,median,na.rm=T)
       nobs <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[3]][1]
       lobs <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[3]][2]
       dist <- MultiSim[[dist_ind]][[size_ind]][[clust_ind]][[10]][[4]]
@@ -344,6 +379,10 @@ acc_df <- vit_df %>% filter(.[[1]] == "Total")
 acc_df <- acc_df[,-1]
 vit_df <- vit_df %>% filter(.[[1]] != "Total")
 
+wsens_df <- vit_df %>% filter(.[[1]] == "Wake Sensitivity")
+wsens_df <- wsens_df[,-1]
+
+
 vit_df <- vit_df %>% mutate(State = rep(c("Wake","Sleep"),dim(vit_df)[1]/2))
 vit_df <- vit_df %>% mutate(Type = rep(c("Sensitivity","Sensitivity","PPV","PPV"),dim(vit_df)[1]/4))
 vit_df <- vit_df[,-1]
@@ -386,12 +425,12 @@ plot_data = nested_loop_base_data(
 p = nested_loop_base_plot(
     plot_data,
     x_name = "", 
-    y_name = "Rate",
+    y_name = "Sensitivity / PPV",
     colors = viridis::viridis(11)[c(1,3:10)],
     shapes = c(17,15,16,16,16,16,16,16,16),
     sizes = c(2,1,1,1,1,1,1,1,1),
-    legend_labels = c("Individual Emission HMM",
-                      "Shared Emission HMM","MHMM2","MHMM3",
+    legend_labels = c("Individual HMM",
+                      "Shared HMM","MHMM2","MHMM3",
                       "MHMM4","MHMM5","MHMM6",
                       "MHMM7","MHMM8"),
     connect_spus = T
@@ -464,12 +503,12 @@ plot_data = nested_loop_base_data(
 p = nested_loop_base_plot(
     plot_data,
     x_name = "", 
-    y_name = "Rate",
+    y_name = "Accuracy",
     colors = viridis::viridis(11)[c(1,3:10)],
     shapes = c(17,15,16,16,16,16,16,16,16),
     sizes = c(1.5,1.5,1,1,1,1,1,1,1),
-    legend_labels = c("Individual Emission HMM",
-                      "Shared Emission HMM","MHMM2","MHMM3",
+    legend_labels = c("Individual HMM",
+                      "Shared HMM","MHMM2","MHMM3",
                       "MHMM4","MHMM5","MHMM6",
                       "MHMM7","MHMM8"),
     connect_spus = T
@@ -511,8 +550,8 @@ p = add_processing(
 
 p + labs(title = "Total Accuracy by Model, Sample Size, and RE Distribution") 
 
-# setwd("../Plots")
-# ggsave("NestedLoopAcc.png",width = 7,height = 5)
+setwd("../Plots")
+ggsave("NestedLoopAcc.png",width = 7,height = 5)
 ```
 
 
@@ -630,8 +669,8 @@ p = nested_loop_base_plot(
     colors = viridis::viridis(11)[c(1,3:10)],
     shapes = c(17,15,16,16,16,16,16,16,16),
     sizes = c(1.5,1.5,1,1,1,1,1,1,1),
-    legend_labels = c("Individual Emission HMM",
-                      "Shared Emission HMM","MHMM2","MHMM3",
+    legend_labels = c("Individual HMM",
+                      "Shared HMM","MHMM2","MHMM3",
                       "MHMM4","MHMM5","MHMM6",
                       "MHMM7","MHMM8"),
     connect_spus = T
@@ -675,8 +714,8 @@ p = add_processing(
 
 p + labs(title = "Transition Residuals by Model, Sample Size, and RE Distribution") 
 
-setwd("../Plots")
-ggsave("NestedLoopTran.png",width = 9,height = 9)
+# setwd("../Plots")
+# ggsave("NestedLoopTran.png",width = 9,height = 9)
 ```
 
 
@@ -760,8 +799,8 @@ p = nested_loop_base_plot(
     colors = viridis::viridis(11)[c(1,3:10)],
     shapes = c(17,15,16,16,16,16,16,16,16),
     sizes = c(1.5,1.5,1,1,1,1,1,1,1),
-    legend_labels = c("Individual Emission HMM",
-                      "Shared Emission HMM","MHMM2","MHMM3",
+    legend_labels = c("Individual HMM",
+                      "Shared HMM","MHMM2","MHMM3",
                       "MHMM4","MHMM5","MHMM6",
                       "MHMM7","MHMM8"),
     connect_spus = T
@@ -769,7 +808,7 @@ p = nested_loop_base_plot(
 
 plot_data = nested_loop_paramsteps_data(
     plot_data,
-    steps_y_base = -.3, steps_y_height = .25, steps_y_shift = .6
+    steps_y_base = -1, steps_y_height = .5, steps_y_shift = 1.5
 )
 
 p = nested_loop_paramsteps_plot(
@@ -853,20 +892,14 @@ bic_df <- bic_df %>% mutate(Distribution = case_when(Distribution == "gamma" ~ "
 bic_df$Distribution <- factor(bic_df$Distribution, levels = c("Gamma", "Normal","Uniform", "Mixture1","Mixture2","t(df=3)","t(df=2)"))
 
 
+bic_df <- bic_df %>%mutate(across(Cluster0:Cluster8, ~ ./Cluster0))
+
+bic_df <- bic_df[,-4]
 ```
 
 
 ```{r,fig.height=9,fig.width=9}
-# time_df <- time_df[,-c(1)]
 
-
-# plot_data = nested_loop_base_data(
-#     time_df,
-#     x = "xfiller", steps = c("Days of Follow-Up","Distribution"),
-#     spu_x_shift = 2,
-#     replace_labels = list("Days of Follow-Up" = c("96" = "1",
-#                                         "672" = "7")),
-# )
 
 plot_data = nested_loop_base_data(
     bic_df,
@@ -882,12 +915,11 @@ plot_data = nested_loop_base_data(
 p = nested_loop_base_plot(
     plot_data,
     x_name = "", 
-    y_name = "Median Running Time (Hours)",
-    colors = viridis::viridis(11)[c(1,3:10)],
-    shapes = c(17,15,16,16,16,16,16,16,16),
-    sizes = c(1.5,1.5,1,1,1,1,1,1,1),
-    legend_labels = c("Individual Emission HMM",
-                      "Shared Emission HMM","MHMM2","MHMM3",
+    y_name = "Relative BIC compared to Individual HMM",
+    colors = viridis::viridis(11)[c(3:10)],
+    shapes = c(15,16,16,16,16,16,16,16),
+    sizes = c(1.5,1,1,1,1,1,1,1),
+    legend_labels = c("Shared HMM","MHMM2","MHMM3",
                       "MHMM4","MHMM5","MHMM6",
                       "MHMM7","MHMM8"),
     connect_spus = T
@@ -896,7 +928,7 @@ p = nested_loop_base_plot(
 plot_data = nested_loop_paramsteps_data(
     plot_data,
     # steps_y_base = -1.5e7, steps_y_height = 3e5, steps_y_shift = 6e5
-    steps_y_base = -.8, steps_y_height = .025, steps_y_shift = .075
+    steps_y_base = .94, steps_y_height = .00625, steps_y_shift = .0125
 )
 
 p = nested_loop_paramsteps_plot(
@@ -920,14 +952,18 @@ p = add_processing(
             panel.grid.major = element_line(
               color = "grey65", size = 0.1
             )
+        ), 
+        # add horizontal lines
+        add_abline = list(
+            intercept = 1
         )
     )
 )
 
-p + labs(title = "Median Running Time by Model, Sample Size, and RE Distribution")
+p + labs(title = "Realtive BIC by Model, Sample Size, and RE Distribution")
 
-# setwd("../Plots")
-# ggsave("NestedLoopBIC.png",width = 7,height = 7)
+setwd("../Plots")
+ggsave("NestedLoopBIC.png",width = 7,height = 7)
 ```
 
 
@@ -944,36 +980,39 @@ mix1 <- function(x,shape,rate,mean,sd){
 
 p1 <- ggplot(data = data.frame(x = c(-7.5,7.5)), aes(x)) +
   stat_function(fun = dnorm, n = 10000, 
-                args = list(mean = init_cond[[1]][1], sd = init_cond[[1]][2]),
+                args = list(mean = 2, sd = 1),
                 aes(colour = "Wake"))  +
   stat_function(fun = dnorm, n = 10000, 
-                args = list(mean = init_cond[[2]][1], sd = init_cond[[2]][2]),
+                args = list(mean = 0, sd = 2),
                 aes(colour = "Sleep"))  +
   scale_y_continuous(breaks = NULL) +
-  labs(x = "Distribution of Activity", y="", title="Distribution of Activity by Wake-Sleep State",color="Wake-Sleep State") +
+  labs(x = "Activity", y="Density", title="Distribution of Activity by Wake-Sleep State",color="Wake-Sleep State") +
   scale_color_viridis(discrete=TRUE,end = .8)+
   theme_bw() +
   theme(legend.position = "top") 
 
 
 setwd("../Plots")
-ggsave("ActDist.png",width = 6,height = 3)
+# ggsave("ActDist.png",width = 6,height = 3)
 
 p2 <- ggplot(data = data.frame(x = c(-8, 8)), aes(x)) +
   scale_y_continuous(breaks = NULL) +
-  labs(x = "Random Effect", y="", title="Random Effect Distribution (H)") + 
+  labs(x = "Random Effect", y="Density", title="Random Effect Distribution (H)") + 
   stat_function(fun = dnorm, n = 10000, args = list(mean = 0, sd = 2),aes(color = "Normal")) +
   geom_function(fun = dgamma1, args = list(shape = 2, rate = 1),aes(color = "Gamma")) +
   geom_function(fun = mix1, args = list(shape = 2, rate = 1,mean = -2,sd = 2), 
                 aes(color = "Normal/Gamma")) + 
-  stat_function(fun = dt, n = 10000, args = list(df=2), aes(color = "t (df = 2)")) +
+  stat_function(fun = dt, n = 10000, args = list(df=3), aes(color = "t (df = 3)")) +
   labs(color = "Distribution") + 
   theme_bw() + 
   theme(legend.position = "top")+
   scale_color_viridis(discrete=TRUE,end = .85)
 
+
+# ggsave("HDist.png",width = 6,height = 3)
+
 setwd("../Plots")
-ggsave("HDist.png",width = 6,height = 3)
+ggsave("REdist.png", arrangeGrob(p1, p2),width = 6,height = 6)
 
 
 ```

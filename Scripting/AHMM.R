@@ -1,9 +1,8 @@
 set_seed <- T
 sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
+if (is.na(sim_num)){sim_num <- 99}
 
-# sim_num <- 1
-
-real_data <- T
+real_data <- F
 
 epsilon <- 1e-5
 # epsilon <- 1e-100
@@ -17,7 +16,6 @@ sleep_params <- c(0,2)
 
 obs_per_day <- 96
 
-if (is.na(sim_num)){sim_num <- 99}
 if (set_seed){set.seed(sim_num)}
 
 RE_num <- as.numeric(commandArgs(TRUE)[1])
@@ -1420,7 +1418,6 @@ CalcAIC <- function(new_likelihood,RE_num,act){
 
 #### User Settings Start Here ####
 
-
 library(matrixStats)
 library(abind)
 library(foreach)
@@ -1571,7 +1568,6 @@ if(real_data){
   
   log_sweights_vec <- c(log_sweights_vec_G/2,log_sweights_vec_H/2)
   
-  
   id <- id %>% mutate(age_disc = case_when(age <= 10 ~ 1,
                                      age <=20 & age > 10 ~ 2,
                                      age <=35 & age > 20 ~ 3,
@@ -1579,11 +1575,20 @@ if(real_data){
                                      age <=65 & age > 50 ~ 5,
                                      age > 65 ~ 6))
   
-  #CHANGE RACE AND POV
-  covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$age_disc))
+  id <- id %>% mutate(pov_disc = floor(poverty)+1)
+  
+  id <- id %>% mutate(bmi_disc = case_when(BMI <= 18.5 ~ 1,
+                                           BMI <=25 & BMI > 18.5 ~ 2,
+                                           BMI <=30 & BMI > 25 ~ 3,
+                                           BMI <=35 & BMI > 30 ~ 4,
+                                           BMI <=40 & BMI > 35 ~ 5,
+                                           BMI > 40 ~ 6))
+  
+  #CHANGE POV AND AGE
+  covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$bmi_disc))
   covar_mat_tran[,1] <- 1
-  for (i in 1:length(id$age_disc)){
-    covar_mat_tran[i,id$age_disc[i]] <- 1
+  for (i in 1:length(id$bmi_disc)){
+    covar_mat_tran[i,id$bmi_disc[i]] <- 1
   } 
   
   
@@ -1596,10 +1601,10 @@ if(real_data){
   light_H <- log(wave_data_H[[2]] + epsilon)
   
   #remove SEQN identifier
-  act_G <- t(act_G)[2:865,]
-  light_G <- t(light_G)[2:865,]
-  act_H <- t(act_H)[2:865,]
-  light_H <- t(light_H)[2:865,]
+  act_G <- t(act_G)[2:dim(act_G)[2],]
+  light_G <- t(light_G)[2:dim(light_G)[2],]
+  act_H <- t(act_H)[2:dim(act_H)[2],]
+  light_H <- t(light_H)[2:dim(light_H)[2],]
   
   act <- cbind(act_G,act_H)
   
@@ -1842,9 +1847,9 @@ if (!real_data){
   
 } else {
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l,re_prob)
-  params_to_save <- list(est_params,likelihood_vec,decoded_mat,starting_conditions,Tran2DF(params_tran),IC)
+  params_to_save <- list(est_params,likelihood_vec,decoded_mat,starting_conditions,Tran2DF(params_tran),IC,emit_act_array)
   
-  save(params_to_save,file = paste0("MHMM",RE_num,".rda"))
+  save(params_to_save,file = paste0("bmiMHMM",RE_num,".rda"))
 }
 
 

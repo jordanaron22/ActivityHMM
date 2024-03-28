@@ -78,9 +78,13 @@ Tran2DF <- function(params_tran){
   return(tran_df)
 }
   
-setwd("Routputs/")
+setwd("MeanRemovedNWAge/")
 file_list <- list.files()
 file_length <- length(file_list)
+
+load(file_list[1])
+n <- dim(params_to_save[[3]])[2]
+bigT <- dim(params_to_save[[3]])[1]
 
 init_est_array <- matrix(0,2,file_length)
 
@@ -92,8 +96,12 @@ binom_est_array <- matrix(0,2,file_length)
 
 pi_est_array <- list(numeric(2))
 
+re_prob_mat <- matrix(0,n,file_length)
 
-act_decode_list <- list(matrix(0,864,13637))
+act_decode_list <- list(matrix(0,bigT,n))
+
+AIC_vec <- numeric(file_length)
+BIC_vec <- numeric(file_length)
 
 for (file_ind in 1:file_length){
   load(file_list[file_ind])
@@ -110,7 +118,13 @@ for (file_ind in 1:file_length){
   
   pi_est_array[length(pi_est_array)+1] <- list(params_to_save[[1]][[5]])
   
+  re_prob_mat[,file_ind] <- apply(params_to_save[[1]][[6]],1,which.max)
+  
+  
   act_decode_list[length(act_decode_list)+1] <- list(params_to_save[[3]])
+  
+  AIC_vec[file_ind] <- params_to_save[[6]][[1]]
+  BIC_vec[file_ind] <- params_to_save[[6]][[2]]
 
 }
 
@@ -130,6 +144,7 @@ sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
 id_G <- wave_data_G[[4]]
 id_H <- wave_data_H[[4]]
 id <- rbind(id_G,id_H)
+id2 <- rbind(wave_data_G[[3]],wave_data_H[[3]])
 
 log_sweights_vec_G <- log(id_G[,3])
 log_sweights_vec_H <- log(id_H[,3])
@@ -143,20 +158,37 @@ id <- id %>% mutate(age_disc = case_when(age <= 10 ~ 1,
                                    age <=65 & age > 50 ~ 5,
                                    age > 65 ~ 6))
 
+id <- id %>% mutate(pov_disc = floor(poverty)+1)
+
+id <- id %>% mutate(bmi_disc = case_when(BMI <= 18.5 ~ 1,
+                                   BMI <=25 & BMI > 18.5 ~ 2,
+                                   BMI <=30 & BMI > 25 ~ 3,
+                                   BMI <=35 & BMI > 30 ~ 4,
+                                   BMI <=40 & BMI > 35 ~ 5,
+                                   BMI > 40 ~ 6))
+
 #CHANGE RACE AND POV
-covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$age_disc))
-covar_mat_tran[,1] <- 1
-for (i in 1:length(id$age_disc)){
-  covar_mat_tran[i,id$age_disc[i]] <- 1
+pov_mat_tran <- matrix(0,ncol = 6, nrow = length(id$pov_disc))
+pov_mat_tran[,1] <- 1
+for (i in 1:length(id$pov_disc)){
+  pov_mat_tran[i,id$pov_disc[i]] <- 1
 } 
-tran_ind_vec <- apply(covar_mat_tran,1,ChooseTran)
+tran_pov_vec <- apply(pov_mat_tran,1,ChooseTran)
+
+age_mat_tran <- matrix(0,ncol = 6, nrow = length(id$age_disc))
+age_mat_tran[,1] <- 1
+for (i in 1:length(id$age_disc)){
+  age_mat_tran[i,id$age_disc[i]] <- 1
+} 
+tran_age_vec <- apply(age_mat_tran,1,ChooseTran)
+
 epsilon <- 1e-3
 act_G <- log(wave_data_G[[1]] + epsilon)
 act_H <- log(wave_data_H[[1]] + epsilon)
 
 #remove SEQN identifier
-act_G <- t(act_G)[2:865,]
-act_H <- t(act_H)[2:865,]
+act_G <- t(act_G)[2:dim(act_G)[2],]
+act_H <- t(act_H)[2:dim(act_H)[2],]
 
 act <- cbind(act_G,act_H)
 ```
@@ -168,6 +200,10 @@ act <- cbind(act_G,act_H)
 
  race_list <- c("0-1","1-2","2-3",
                "3-4","4-5","5+")
+ 
+race_list <- c("3-10","11-20","21-35","36-50","50-65","65+")
+
+race_list <- factor(race_list, levels = race_list)
 
 Params2DFHelper <- function(tran_est_array,re_num){
   
@@ -215,14 +251,14 @@ tran_df_total <- Params2DF(tran_est_array)
 ggplot(tran_df_total %>% filter(type == "Sleep"), aes(x = time,y = prob, color = race)) + 
   geom_line() + 
   labs(title = "Probability of Falling Asleep by Hour", x = "Hour", 
-       y = "Probability of Falling Asleep",color = "Income to Poverty \nLine Ratio") +
+       y = "Probability of Falling Asleep",color = "Age") +
   facet_wrap(vars(re_num),labeller = labeller(re_num = nre.labs))+
   scale_color_viridis(discrete=TRUE,end=.9) 
 
 ggplot(tran_df_total %>% filter(type == "Wake"), aes(x = time,y = prob, color = race)) + 
   geom_line() + 
   labs(title = "Probability of Waking by Hour", x = "Hour", 
-       y = "Probability of Falling Asleep",color = "Income to Poverty \nLine Ratio") +
+       y = "Probability of Falling Asleep",color = "Age") +
   facet_wrap(vars(re_num),labeller = labeller(re_num = nre.labs))+
   scale_color_viridis(discrete=TRUE,end=.9) 
 ```
@@ -360,24 +396,31 @@ class6 <- which(re_prob[,6] == max(re_prob[,1] ,na.rm = T), arr.ind = TRUE)
 ###NEED TO FIX THIS WITH WITH ADDED MODELS
 
 model_vec <- c(0,1,2,3,4,5,6,7,8)
-model_vec <- c(1)
+# model_vec <- c(1)
 
 DecodingPlots <- function(ind){
+  bigT <- dim(act_decode_array)[1]
   decoded_df <- data.frame(decode = as.vector(act_decode_array[,ind,]),
-                           supportpoints = rep(model_vec,each = 864),
-                           lwd = rep(seq(.5,.25,length = length(model_vec)),each = 864),
+                           supportpoints = rep(model_vec,each = bigT),
+                           lwd = rep(seq(.5,.25,length = length(model_vec)),each = bigT),
                            act = rep(act[,ind],length(model_vec)),
-                           time =rep(c(seq(as.POSIXct("2024-01-01"), as.POSIXct("2024-01-10"), by=60*15)[1:864]),length(model_vec)))
+                           time =rep(c(seq(as.POSIXct("2024-01-01"), as.POSIXct("2024-01-10"), by=60*15)[1:bigT]),length(model_vec)))
   
   decoded_df$supportpoints <- as.factor(decoded_df$supportpoints)
   decoded_df$lwd <- as.factor(decoded_df$lwd)
   
   
-  # decoded_df <- decoded_df[97:768,]
+  #For full data
   decoded_df0 <- decoded_df[1:864,]
   decoded_df1 <- decoded_df[865:1728,]
   decoded_df6 <- decoded_df[6049:6912,]
-  # decoded_df <- decoded_df[c(1:864,4321:5184),]
+  time_ticks <- 28
+  
+  # #For weekend data 
+  # decoded_df0 <- decoded_df[1:288,]
+  # decoded_df1 <- decoded_df[289:576,]
+  # decoded_df6 <- decoded_df[2305:2592,]
+  # time_ticks <- 19
   
   # p <- ggplot(decoded_df, aes(x=time, y=decode), size =lwd) +
   #   geom_line(aes(color = supportpoints,linetype = supportpoints)) +
@@ -395,7 +438,7 @@ DecodingPlots <- function(ind){
   
   g <- ggplot(decoded_df, aes(x=time, y=act)) +
     geom_point() +
-    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=time_ticks), 
                      date_labels="%H:%M")+
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) + 
@@ -405,7 +448,7 @@ DecodingPlots <- function(ind){
   
   p0 <- ggplot(decoded_df0, aes(x=time, y=decode)) +
     geom_path(color = viridis(7)[1]) +
-    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=time_ticks), 
                      date_labels="%H:%M")+
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = .5, vjust = 0.5))+
@@ -420,7 +463,7 @@ DecodingPlots <- function(ind){
   
   p1 <- ggplot(decoded_df1, aes(x=time, y=decode)) +
     geom_path(color = viridis(7)[1]) +
-    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=time_ticks), 
                      date_labels="%H:%M")+
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = .5, vjust = 0.5))+
@@ -436,7 +479,7 @@ DecodingPlots <- function(ind){
   
   p6 <- ggplot(decoded_df6, aes(x=time, y=decode)) +
     geom_path(color = viridis(7)[1]) +
-    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=28), 
+    scale_x_datetime(breaks= seq(min(decoded_df$time), max(decoded_df$time)+15*60, length=time_ticks), 
                      date_labels="%H:%M")+
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = .5, vjust = 0.5))+
@@ -490,24 +533,58 @@ DecodingPlots(132)
 
 DecodingPlots(9)
 
-DecodingPlots(13637)
+DecodingPlots(246)
 
 
 ```
 
 
 ```{r}
-full_data_ind <- which(colSums(!is.na(act)) > 750)
-tran_ind_vec2 <- tran_ind_vec[full_data_ind]
 n <- dim(act)[2]
+
+# full_data_ind <- which(colSums(!is.na(act)) > 672)
+full_data_ind <- which(colSums(!is.na(act)) > 100)
+
+tran_pov_vec2 <- tran_pov_vec[full_data_ind]
+tran_age_vec2 <- tran_age_vec[full_data_ind]
+
+ReturnLongestBlockIndex <- function(vit_ind_day,forw_look){
+  if (sum(vit_ind_day) == 0){return(0)}
+  
+  if (sum(vit_ind_day[1:(96-forw_look)])==0){
+    return(c(which.max(vit_ind_day),96))
+  }
+  
+  forw_look <- forw_look - 1
+  rs <- numeric((length(vit_ind_day)-forw_look))
+  for (i in 1:(length(vit_ind_day)-forw_look)){
+    if (i > 1){
+      rs[i] <- sum(vit_ind_day[i:(i+forw_look)])*max(rs[i-1]>0,vit_ind_day[i])
+    } else {
+      rs[i] <- sum(vit_ind_day[i:(i+forw_look)])*vit_ind_day[i]
+    }
+  }
+  
+  rs <- rs > 0
+  runs <- rle(rs)
+  lengths <- runs$lengths
+  
+  end = cumsum(lengths)
+  start = c(1, lag(end)[-1] + 1)
+  
+  is_max <- which(lengths == max(lengths[runs$values]) & runs$values)
+  return(c(start[is_max],end[is_max]))
+}
+
+  
+
 final_df <- data.frame()
 
 #NEED TO DEAL WITH MISSING DATA
 
 
 # vit_ind <- act_decode_array[c(49:816),ind,model]
-tic()
-for (model_ind in 1:1){
+for (model_ind in 9:9){
   sleep_block_vec <- c()
   sleep_eff_vec <- c()
   sleep_onset_vec <- c()
@@ -518,31 +595,38 @@ for (model_ind in 1:1){
     vit_ind <- act_decode_array[,ind,model_ind]
     len <- length(vit_ind)
   
-    day_len <- 8
+    day_len <- (dim(act_decode_array)[1] %/% 96) - 1
     sleep_block_ind_vec <- c()
     sleep_eff_ind_vec <- c()
     sleep_onset_ind_vec <- c()
     sleep_total_ind_vec <- c()
     
     for(day in 1:day_len){
-      start_ind <- 81 + (96*(day-1))
+      start_ind <- 49 + (96*(day-1))
       stop_ind <- 48 + (96*day)
       vit_ind_day <- vit_ind[start_ind:stop_ind]
       
       
-      sleep_times <- which(vit_ind_day == 1)
+      block_indices <- ReturnLongestBlockIndex(vit_ind_day,8)
       
-      sleep_block <- sleep_times[length(sleep_times)] - sleep_times[1] + 1
-      sleep_eff <- length(sleep_times)/sleep_block
-      sleep_onset <- sleep_times[1] + 80
-      sleep_total <- sum(vit_ind_day == 1)
-      
-      
-      if (length(sleep_times)==0){
+      if (length(block_indices)==1){
         sleep_block <- 0
         sleep_eff <- 0
         sleep_onset <- 0
+      } else {
+        block_start <- block_indices[1]
+        block_end <- block_indices[2]
+        
+        sleep_block <- block_end - block_start + 1
+        sleep_eff <- sum(vit_ind_day[block_start:block_end]==1)/sleep_block
+        sleep_onset <- block_start + 48
+        sleep_total <- sum(vit_ind_day == 1)
       }
+      
+        
+      
+      
+      
       
       if (sum(is.na(act[start_ind:stop_ind,ind]))>32){
         sleep_block <- NA
@@ -569,7 +653,16 @@ for (model_ind in 1:1){
                          modelnum = model_ind,
                          onset = sleep_onset_vec,
                          totalSleep = sleep_total_vec,
-                         pov = tran_ind_vec2)
+                         pov = tran_pov_vec2,
+                         pov_cont = id$poverty[full_data_ind],
+                         age = tran_age_vec2,
+                         age_cont = id$age[full_data_ind],
+                         race = id$race[full_data_ind],
+                         bmi_cont = id$BMI[full_data_ind],
+                         bmi_disc = id$bmi_disc[full_data_ind],
+                         gender = id2$gender[full_data_ind],
+                         houseFS = id2$houseFS[full_data_ind],
+                         clust = re_prob_mat[full_data_ind,model_ind])
   final_df <- rbind(final_df,working_df)
 }
   
@@ -578,12 +671,21 @@ for (model_ind in 1:1){
 sleep_df <- final_df
 sleep_df$modelnum <- as.factor(sleep_df$modelnum)
 sleep_df$pov <- as.factor(sleep_df$pov)
+sleep_df$age <- as.factor(sleep_df$age)
 
+sleep_df$clust <- as.factor(sleep_df$clust)
+sleep_df$race <- as.factor(sleep_df$race)
+
+sleep_df$gender <- as.factor(sleep_df$gender)
+sleep_df$houseFS <- as.factor(sleep_df$houseFS)
+
+sleep_df$bmi_disc <- as.factor(sleep_df$bmi_disc)
+
+
+```
+
+```{r}
 # sleep_df <- sleep_df %>% filter(modelnum == 7)
-
-ggplot(sleep_df, aes(x=pov, y=onset)) + 
-  geom_boxplot()
-
 
 sleep_df %>%
     # Specify group indicator, column, function
@@ -591,7 +693,176 @@ sleep_df %>%
     # Calculate the mean of the "Frequency" column for each group
     summarise_at(c("block", "onset", "eff", "totalSleep"), mean, na.rm = TRUE)
 
+ggplot(sleep_df, aes(x=pov, y=block)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=pov, y=onset)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=pov, y=eff)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=pov, y=totalSleep)) + 
+  geom_boxplot()
+
+```
+
+
+```{r}
+
+sleep_df %>%
+    # Specify group indicator, column, function
+    group_by(age) %>%
+    # Calculate the mean of the "Frequency" column for each group
+    summarise_at(c("block", "onset", "eff", "totalSleep"), mean, na.rm = TRUE)
+
+ggplot(sleep_df, aes(x=as.factor(age), y=block)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=as.factor(age), y=onset)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=as.factor(age), y=eff)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=as.factor(age), y=totalSleep)) + 
+  geom_boxplot(outlier.shape = NA)
+
+```
+
+
+```{r}
+
+
+sleep_df %>%
+    # Specify group indicator, column, function
+    group_by(clust) %>%
+    # Calculate the mean of the "Frequency" column for each group
+    summarise_at(c("block", "onset", "eff", "totalSleep"), mean, na.rm = TRUE)
+
+
+ggplot(sleep_df, aes(x=clust, y=pov_cont)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=clust, y=age_cont)) + 
+  geom_boxplot(outlier.shape = NA)
+
+
+ggplot(sleep_df, aes(x=clust, y=block)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=clust, y=onset)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=clust, y=eff)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=clust, y=totalSleep)) + 
+  geom_boxplot()
+
+```
+
+```{r}
+ggplot(sleep_df, aes(x=gender, y=block)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=gender, y=onset)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=gender, y=eff)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=gender, y=totalSleep)) + 
+  geom_boxplot()
+
+
+
+
+ggplot(sleep_df, aes(x=houseFS, y=block)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=houseFS, y=onset)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=houseFS, y=eff)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=houseFS, y=totalSleep)) + 
+  geom_boxplot()
+
+
+ggplot(sleep_df, aes(x=bmi_disc, y=block)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=bmi_disc, y=onset)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=bmi_disc, y=eff)) + 
+  geom_boxplot()
+
+ggplot(sleep_df, aes(x=bmi_disc, y=totalSleep)) + 
+  geom_boxplot()
+
+
+```
+
+```{r}
+sleep_df %>%
+    # Specify group indicator, column, function
+    group_by(age) %>%
+    # Calculate the mean of the "Frequency" column for each group
+    summarise_at(c("block", "onset", "eff", "totalSleep"), mean, na.rm = TRUE)
+
+ggplot(sleep_df, aes(x=as.factor(age_cont), y=block)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=as.factor(age_cont), y=onset)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=as.factor(age_cont), y=eff)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=as.factor(age_cont), y=totalSleep)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=clust, y=age_cont)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=clust, y=bmi_cont)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=bmi_disc, y=eff)) + 
+  geom_boxplot()
+
 ```
 
 
 
+```{r}
+
+
+load("/Users/aronjr/Documents/Predoc/ActivityHMM/ParseData/MeanRemovedNWAge/MHMM0.rda")
+
+
+km <- kmeans(params_to_save[[7]][1,1,],centers = 8,algorithm="Lloyd",iter.max = 1000)
+centers <- sort(km$centers)
+km <- kmeans(params_to_save[[7]][1,1,],centers = centers,algorithm="Lloyd",iter.max = 10)
+
+km$centers
+act_est_array[[8]][1,1,]
+
+
+sleep_df <- sleep_df%>% mutate(kgroup = as.factor(km$cluster[full_data_ind]))
+
+ggplot(sleep_df, aes(x=clust, y=age_cont)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=kgroup, y=age_cont)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=clust, y=bmi_cont)) + 
+  geom_boxplot(outlier.shape = NA)
+
+ggplot(sleep_df, aes(x=kgroup, y=bmi_cont)) + 
+  geom_boxplot(outlier.shape = NA)
+```

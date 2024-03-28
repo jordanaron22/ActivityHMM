@@ -1,0 +1,33 @@
+---
+title: "MiscPlot"
+output: html_document
+date: "2024-03-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+ts <- seq(as.POSIXct("1970-01-01", tz = "UTC"),
+    as.POSIXct("1970-01-02", tz = "UTC"),
+    by = "min")
+ts <- ts[-1441]
+
+data_frame <- data.frame(est = unlist(acth_long_G[4,4:1443]),
+                         time = ts)
+
+
+
+ggplot(data_frame, aes(x = time, y = est)) +
+    geom_line() +
+    scale_x_datetime(breaks = breaks_width("4 hour"),date_labels = "%H:%M") +
+    ggtitle("Activity by Time") +
+  xlab("Time") +
+  ylab("Activity (MIMS)") +
+  theme_bw()
+
+ggsave(filename = "SampleActivty.jpg",height = 2, width = 5)
+
+```

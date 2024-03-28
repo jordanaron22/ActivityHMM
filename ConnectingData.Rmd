@@ -62,11 +62,11 @@ acth_long_H[,4:1443] <- acth_long_H[,4:1443] + flag_long_H[,4:1443]
 # nonwear_long[,3:1442] <- (pred_long[,3:1442] !=3)
 # nonwear_long[nonwear_long==F] <- NA
 
+# Uncomment this to remove non-wear (but non wear is predicted by watch)
 pred_long_G[,4:1443] <- (pred_long_G[,4:1443] !=3)
 pred_long_G[is.na(pred_long_G)] <- F
 pred_long_H[,4:1443] <- (pred_long_H[,4:1443] !=3)
 pred_long_H[is.na(pred_long_H)] <- F
-
 
 acth_long_G[pred_long_G == F] <- NA
 lux_long_G[pred_long_G == F] <- NA
@@ -98,7 +98,7 @@ AddVariable <- function(var_name,add_data, seqn_freq,seqn_list){
 DownsampleInd <- function(long_data_ind, minutes = 15){
   down_samp_ind_mat <- matrix(as.numeric(long_data_ind), ncol = minutes, byrow = T)
   #MEAN OR MEDIAN HERE IS IMPORTANT
-  return(apply(down_samp_ind_mat,1,median, na.rm = T))
+  return(apply(down_samp_ind_mat,1,mean, na.rm = T))
 }
 
 DownsampleConcatTranspose <- function(data_long,id_info){
@@ -116,6 +116,10 @@ DownsampleConcatTranspose <- function(data_long,id_info){
 ```
 
 ```{r}
+#Uncomment this for only weekend
+acth_long_H <- acth_long_H %>% filter(PAXDAYWM == 1 |PAXDAYWM == 7 )
+lux_long_H <- lux_long_H %>% filter(PAXDAYWM == 1 |PAXDAYWM == 7 )
+
 
 seqn_freq_H <- table(acth_long_H$SEQN)
 seqn_list_H <- unique(acth_long_H$SEQN)
@@ -133,12 +137,14 @@ covariate_df_H <- data.frame(gender = AddVariable("RIAGENDR" ,demo_H, seqn_freq_
                            houseFS = AddVariable("FSDHH" ,food_sec_H, seqn_freq_H, seqn_list_H),
                            race = AddVariable("RIDRETH3" ,demo_H, seqn_freq_H, seqn_list_H),
                            poverty = AddVariable("INDFMPIR" ,demo_H, seqn_freq_H, seqn_list_H),
+                           age = AddVariable("RIDAGEYR" ,demo_H, seqn_freq_H, seqn_list_H),
                            sweights = AddVariable("WTMEC2YR" ,demo_H, seqn_freq_H, seqn_list_H))
 
 covariate_df_H <- covariate_df_H %>% mutate(houseFS = replace(houseFS, houseFS > 1, 2) - 1)
 covariate_df_H <- covariate_df_H %>% mutate(gender = gender - 1)
 covariate_df_H <- covariate_df_H %>% add_column(intercept = 1, .before = "gender")
-covariate_df_H <- covariate_df_H %>% mutate(poverty = floor(poverty) + 1)
+# covariate_df_H <- covariate_df_H %>% mutate(poverty = floor(poverty) + 1)
+covariate_df_H <- covariate_df_H %>% mutate(poverty = poverty)
 
 covariate_df_H$race[covariate_df_H$race==6] <- 5
 covariate_df_H$race[covariate_df_H$race==7] <- 6
@@ -161,7 +167,7 @@ lux_down_H <- DownsampleConcatTranspose(lux_long_H,id_info_H)
 covariate_df_H <- apply(covariate_df_H,2,as.numeric) 
 covariate_df_H <- cbind(covariate_df_H,id_info_H)
 covariate_df_H <- covariate_df_H %>% filter(PAXDAYM == 1)
-id_info_H <- covariate_df_H[4:7]
+id_info_H <- covariate_df_H[4:8]
 covariate_df_H <- covariate_df_H[,1:3]
 
 wave_data_H <- list(acth_down_H,lux_down_H,covariate_df_H,id_info_H)
@@ -172,6 +178,10 @@ save(wave_data_H,file = "Wavedata_H.rda")
 
 
 ```{r}
+#Uncomment this for only weekend
+acth_long_G <- acth_long_G %>% filter(PAXDAYWM == 1 |PAXDAYWM == 7 )
+lux_long_G <- lux_long_G %>% filter(PAXDAYWM == 1 |PAXDAYWM == 7 )
+
 
 seqn_freq_G <- table(acth_long_G$SEQN)
 seqn_list_G <- unique(acth_long_G$SEQN)
@@ -189,12 +199,14 @@ covariate_df_G <- data.frame(gender = AddVariable("RIAGENDR" ,demo_G, seqn_freq_
                            houseFS = AddVariable("FSDHH" ,food_sec_G, seqn_freq_G, seqn_list_G),
                            race = AddVariable("RIDRETH3" ,demo_G, seqn_freq_G, seqn_list_G),
                            poverty = AddVariable("INDFMPIR" ,demo_G, seqn_freq_G, seqn_list_G),
+                           age = AddVariable("RIDAGEYR" ,demo_G, seqn_freq_G, seqn_list_G),
                            sweights = AddVariable("WTMEC2YR" ,demo_G, seqn_freq_G, seqn_list_G))
 
 covariate_df_G <- covariate_df_G %>% mutate(houseFS = replace(houseFS, houseFS > 1, 2) - 1)
 covariate_df_G <- covariate_df_G %>% mutate(gender = gender - 1)
 covariate_df_G <- covariate_df_G %>% add_column(intercept = 1, .before = "gender")
-covariate_df_G <- covariate_df_G %>% mutate(poverty = floor(poverty) + 1)
+# covariate_df_G <- covariate_df_G %>% mutate(poverty = floor(poverty) + 1)
+covariate_df_G <- covariate_df_G %>% mutate(poverty = poverty)
 
 covariate_df_G$race[covariate_df_G$race==6] <- 5
 covariate_df_G$race[covariate_df_G$race==7] <- 6
@@ -217,7 +229,7 @@ lux_down_G <- DownsampleConcatTranspose(lux_long_G,id_info_G)
 covariate_df_G <- apply(covariate_df_G,2,as.numeric) 
 covariate_df_G <- cbind(covariate_df_G,id_info_G)
 covariate_df_G <- covariate_df_G %>% filter(PAXDAYM == 1)
-id_info_G <- covariate_df_G[4:7]
+id_info_G <- covariate_df_G[4:8]
 covariate_df_G <- covariate_df_G[,1:3]
 
 wave_data_G <- list(acth_down_G,lux_down_G,covariate_df_G,id_info_G)

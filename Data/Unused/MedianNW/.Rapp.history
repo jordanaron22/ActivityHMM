@@ -1,0 +1,2 @@
+load("/Users/aronjr/Documents/Predoc/ActivityHMM/Data/DataWithNonWear/Wavedata_G.rda")
+head(wave_data_G[[4]])

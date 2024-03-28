@@ -15,7 +15,7 @@
     pdfpagemode=FullScreen,
 }
 
-\renewcommand{\includegraphics}[2][]{}
+%\renewcommand{\includegraphics}[2][]{}
 
 \title{Practical Concerns for Estimating Mixed Hidden Markov Models}
 \author{}
@@ -102,7 +102,7 @@ To simplify the integral (as well as allowing future computations with the forwa
 \begin{equation*}\label{like2}
     \begin{split}
 f(\textbf{a}|\theta) = \prod_{i=1}^n \sum_{l=1}^L \sum_{{s_1}\cdots{s_T}} \biggr[ 
-    b_{s_1} & \prod_{t=2}^T p_{s_{t-1}s_t}(it) 
+    p_{s_1} & \prod_{t=2}^T p_{s_{t-1}s_t}(it) 
     \prod_{t=1}^T \lambda_{s_t}^{\delta_{it}} \big[(1-\lambda_{s_t})P(a_{it}|S_{it}=s_t,b_i=r_l)\big]^{1-\delta_{it}} \biggr] \pi_l,
     \end{split}
 \end{equation*}
@@ -253,36 +253,42 @@ Unlike the previous parameters, no closed form solution exists for the transitio
 
 \section{Simulation Study}\label{SimStudy}
 
+\subsection{Simulation Settings} \label{SimSettings}
+
+The following two questions motivated this simulation study. Do MHMMs provide enough of an advantage to motivate their use compared to standard HMMs? When estimating a MHMM how many support points are necessary for the NPDE of the RE distribution? Three different types of HMMs were tested: HMM where each person has their own wake activity mean and variance parameter (individual HMM), HMM where there is a shared wake activity mean and variance parameter (shared HMM), and seven MHMMs with two to eight support points (MHMM2-MHMM8) as described by section \ref{Methods}. The shared HMM is a special case of a MHMM with one support point. For all models, the initial, transition, and sleep emission parameters are shared across all individuals.
+
+We first simulate the sequence of MC states corresponding to the wake/sleep state of person $i$ at time $t$ according to pre-specified initial and transition probabilities. For the transition probabilities, we let $\beta_j = \{\beta_{j0}, ..., \beta_{j8}\}$ and $X_{it} = \{1, x_{it1}, ..., x_{it8}\}$, where:
+\begin{itemize}
+    \item $x_{it1}$ and $x_{it2}$ are fixed covariates equal to 1 if that covariate applies to person i.
+    \item $x_{it3} = \text{cos}(\frac{2\pi t}{96})$ and $x_{it4} = \text{sin}(\frac{2\pi t}{96})$ vary by time to account for the circadian rhythm.
+    \item $x_{it5}$ and $x_{it6}$ are the respective cosine and sine terms for the first fixed covariate.
+    \item $x_{it7}$ and $x_{it8}$ are the respective cosine and sine terms for the second fixed covariate.
+\end{itemize}
+
+Any first order harmonic function with a period of 96 can be estimated. A period of 96 was chosen as this is equivalent to dividing each day into 15 minute intervals. We vary both the number of people (1000 and 5000) and the length observations per person (one day and one week of follow up). For each person, we draw $u_i$ from H. We considered different underlying RE distribution such that H is Normal, Gamma, Normal/Gamma mixture, and t with 3 degrees of freedom (figure \ref{REdist}). We then simulate the observed activity data where $a_{it} \sim N(2+u_i,1)$ if $S_{it}=0$ and $a_{it} \sim N(0,2)$ if $S_{it}=1$ and estimate the model parameters using each of the different types of HMMs. Lastly, we use the Viterbi algorithm to construct the most likely sequence of the latent wake/sleep states given our estimated parameters. We compare the estimated sequence with the true wake/sleep sequence. This was repeated 100 times for each combination (model, number of people, length of observation, choice of H).
+
+
 \subsection{Results}\label{SimStudyResults}
-
-It is not clear how best to approach MHMM estimation. We conceived of this simulation study to test the following two questions. Do MHMMs provide enough of an advantage to motivate their use compared to standard HMMs? When estimating a MHMM how many support points are necessary for the NPDE of the RE distribution? Standard HMMs are often faster and easier to implement, however MHMMs may provide higher accuracy given a sufficient number of support points are chosen.
-
-To answer these questions, we tested three different types of HMMs: standard HMM where each person has their own wake activity mean and variance parameter (individual HMM), standard HMM where there is a shared wake activity mean and variance parameter (shared HMM), and seven MHMMs with two to eight support points (MHMM2-MHMM8) as described by section \ref{Methods}. The shared HMM is a special case of a MHMM with one support point. 
-
-For the simulation study, we first simulate the sequence of MC states corresponding to the wake/sleep state of person $i$ at time $t$ according to pre-specified initial and transition probabilities. For transition probabilities, we let $\beta_j = \{\beta_{j0}, ..., \beta_{j8}\}$ and $X_{it} = \{1, x_{it1}, ..., x_{it8}\}$, where $x_{it1}$ and $x_{it2}$ are fixed covariates equal to 1 if that covariate applies to person i. $x_{it3} = \text{cos}(\frac{2\pi t}{96})$ and $x_{it4} = \text{sin}(\frac{2\pi t}{96})$ vary by time to account for the cyclical nature of the circadian rhythm. $x_{it5}$ and $x_{it6}$ are the respective cosine and sine terms for the first fixed covariate. $x_{it7}$ and $x_{it8}$ are the respective cosine and sine terms for the second fixed covariate. Any first order harmonic function with a period of 96 can be estimated. A period of 96 was chosen as this is equivalent to dividing one day into 15 minute intervals. We vary both the number of people (1000 and 5000) and the length observations per person (one day and one week of follow up). For each person, we draw a continuous individual level RE from H. We considered different underlying RE distribution such that H is normal, gamma, normal/gamma mixture, and t with 2 degrees of freedom (figure \ref{REdist}). We then simulate the observed activity data where $a_{it} \sim N(2+u_i,1)$ if $S_{it}=0$ and $a_{it} \sim N(0,2)$ if $S_{it}=1$ and estimate the model parameters. Lastly, we use the Viterbi algorithm to construct the most likely sequence of the latent wake/sleep states given our estimated parameters. We compare the estimated sequence with the true wake/sleep sequence. This was repeated 100 times for each combination (model, number of people, length of observation, choice of H).
 
 \begin{figure}
 \includegraphics[scale=.5]{Support/REdist.png}
 \centering
-\caption{Distributions used in simulation study. Top plot shows wake 
-(no RE) and sleep activity distribution. The bottom two plots show the 
-different continuous RE distributions. RE distributions have been split 
-up over two plots to increase readability.}
+\caption{Top plot shows wake (without RE) and sleep activity distribution. Bottom plot shows the possible choices for H, the continuous RE distribution.}
 \label{REdist}
 \end{figure}
 
-The top plot of figure \ref{REdist} shows the wake (without a RE) and sleep activity distribution. Each individual's wake activity distribution would be shifted to the right or left depending on $u_i$. The bottom plot shows the different choices for H. We center all possible choices of H around 0 so that the overlap between the wake and sleep activity distributions is the same for all H, given that $u_i$ equals the mean of H. 
+The top plot of figure \ref{REdist} shows the wake (without a RE) and sleep activity distribution. Each individual's wake activity distribution is shifted to the right or left depending on $u_i$. The bottom plot shows the different choices for H. We center H around 0 so that the expected overlap between the wake and sleep activity distributions is the same for each person for all choices of H. 
 
 \begin{figure}
     \includegraphics[scale=.8]{Support/NestedLoopAcc.png}
     \centering
-    \caption{Nested loop plot of simulation results for total accuracy of predicted wake/sleep sequence. Each point is the median of 100 simulations and color indicates the number of support points. The X axis indicates the simulation settings, which are a combination of days follow-up, number of participants, and RE distribution.}
+    \caption{Nested loop plot of simulation results for total accuracy of predicted wake/sleep sequence. Each point is the median of 100 simulations. Color indicates model. The X axis indicates the simulation settings, which are a combination of days follow-up, number of participants, and RE distribution.}
     \label{NLacc}
 \end{figure}
     
-Figure \ref{NLacc} shows the results from the simulation in a nested loop (NL) plot. The y-axis for this figure is the accuracy of the estimated wake-sleep sequence compared to the true wake-sleep sequence. The color represents the model and the x-axis represents the different simulation settings (days of follow up, number of participants, and choice of H). To read the NL plot, each point corresponds to a different combination of the simulation settings. Take for example the left most light green point. Following the gray line down, that point corresponds to simulated data with 1 day of follow up, 1000 participants, and H is a Gamma distribution.
+Figure \ref{NLacc} shows the results from the simulation in a nested loop (NL) plot. The y-axis for this figure is the accuracy of the estimated wake-sleep sequence compared to the true wake-sleep sequence. The color represents the model and the x-axis represents the different simulation settings. To read the NL plot, each point corresponds to a unique combination of model and simulation settings. Take for example the left most light green point. On the x-axis, that point corresponds to simulated data with 1 day of follow up, 1000 participants, and where H is a Gamma distribution.
 
-As can be seen from figure \ref{NLacc}, across all simulations the shared HMM and two support point MHMM have the lowest and second-lowest accuracy, respectively. Increasing the number of support points increases the accuracy, where a MHMM with 8 support points is the most accurate across all simulations. The increase in accuracy from each added support point diminishes, where H determines both how quickly this increase diminishes and the maximum accuracy. For instance, when H is Gamma there is substantial gain from two to three support points, a marginal gain from three to four, and practically no gain from four to five. The individual HMM preforms well however it is highly reliant on the simulation settings. Depending on H and the number of observations per person, the individual HMM preforms similar to a MHMM with anywhere between four and eight support points. 
+As can be seen from figure \ref{NLacc}, across all simulations the shared HMM and two support point MHMM have the lowest and second-lowest accuracy, respectively. Increasing the number of support points increases the accuracy, where a MHMM with 8 support points is the most accurate across all simulations. The increase in accuracy from each added support point diminishes, where H appears to determine both how quickly this increase diminishes and the maximum accuracy. For instance, when H is the Gamma distribution there is substantial gain from two to three support points, a marginal gain from three to four, and negligible gain from more than four. Overall, accuracy increases when the number of support points increases. The individual HMM preforms well however it is reliant on H and the number of observations per person, preforming similar to a MHMM with anywhere between four and eight support points. 
  
 
 
@@ -291,96 +297,66 @@ As can be seen from figure \ref{NLacc}, across all simulations the shared HMM an
 \begin{figure}
 \includegraphics[scale=.65]{Support/NestedLoopSP.png}
 \centering
-\caption{Nested loop plot of simulation results for 
-sensitivity (left column) and precision (right column) 
-for wake (top row) and sleep (bottom row). Each point is
- the median of 100 simulations and the color indicates 
- the number of support points. The X axis indicates the 
- simulation settings, which are a combination of days follow-up, 
- number of participants, and RE distribution. Precision may also 
- be referred to as the positive predictive value.}
+\caption{Nested loop plot of simulation results for sensitivity (left column) and precision (right column) for wake (top row) and sleep (bottom row). Each point is the median of 100 simulations. Color indicates model used. The X axis indicates the simulation settings, which are a combination of days follow-up, number of participants, and RE distribution.}
 \label{NL2}
 \end{figure}
 
-To get a better understanding of how the method is working we examine the sensitivity and positive predictive value (PPV). Figure \ref{NL2} shows the sensitivity (left column) and PPV (right column) for the wake (top row) and sleep (bottom row) states. Recall that wake sensitivity is the percent of all truly wake states that we accurately predict as wake, and wake PPV is the percent of predicted wake states that are truly wake. 
-
-When we fit the shared HMM and two support point MHMM, we see that although the sleep sensitivity is high, the wake sensitivity is comparatively low. This is because unless the activity for time $t$ is very high, the state at time $t$ is predicted to be sleep. In other words, we are classifying all low activity wake behavior as sleep. This can be seen by looking at the sleep PPV. The sleep PPV is low for these two models because we classify truly wake states as sleep. On the other hand, wake PPV is very high because although we rarely predict wake, we do so only if we see a high activity measure.
-
-When the number of support points is increased, the wake sensitivity increases, while the sleep sensitivity decreases slightly. This occurs as, although we are better at classifying low activity wake behavior as wake, we also misclassify some sleep activity as wake. This causes wake PPV to decrease and sleep PPV to increase. Overall, total accuracy is increased when the number of support points is increased as we can better classify wake states when we observe low activity measurements. Similar to overall accuracy, the individual HMM preforms similarly to a MHMM with somewhere between four and eight support points depending on the simulations settings.
+We examine the sensitivity and positive predictive value (PPV). Recall that wake sensitivity is the percent of all truly wake states that we accurately predict as wake, and wake PPV is the percent of predicted wake states that are truly wake. Figure \ref{NL2} shows the sensitivity (left column) and PPV (right column) for the wake (top row) and sleep (bottom row) states. Across all simulations the shared HMM and two support point MHMM has high sleep sensitivity, comparatively low wake sensitivity, and low sleep PPV. This indicates that in uncertain situations the models consistently predict the sleep state, even when the underlying state is wake. As the wake PPV is very high, the wake state is only predicted when it is clear that the underlying state is wake. When the number of support points is increased, the wake sensitivity increases, while the sleep sensitivity decreases slightly. This occurs because although we are better at predicting hard-to-classify wake behavior as wake, we also misclassify some sleep as wake, causing wake PPV to decrease and sleep PPV to increase. Similar to overall accuracy, the individual HMM preforms similarly to a MHMM with somewhere between four and eight support points depending on the simulations settings.
 
 \begin{figure}
     \includegraphics[scale=.65]{Support/NestedLoopTran.png}
     \centering
-    \caption{Nested loop plot of simulation results for 
-    the 90th percentile of the absolute value of the transition residuals. The left column is the transition from sleep to wake and the right column is for wake to sleep. The rows are for the possible covariate options. Each point is the median of 100 simulations and the color indicates  the number of support points. The X axis indicates the  simulation settings, which are a combination of days follow-up, number of participants, and RE distribution.}
+    \caption{Nested loop plot of simulation results for the 90th percentile of the absolute value of the transition residuals. The left column is the transition from sleep to wake and the right column is for wake to sleep. The rows are for the possible fixed covariates. Each point is the median of 100 simulations. Color indicates model used. X-axis indicates the simulation settings, which are a combination of days follow-up, number of participants, and RE distribution.}
     \label{NLtran}
 \end{figure}
 
-Increasing the number of support points also reduces the bias in the estimated transition matrix. Figure \ref{NLtran} is a NL plot for the median of the $90^{\text{th}}$ percentile of the absolute value of the transition residuals across 100 simulations. As the transition probabilities are simulated as a first order harmonic, the absolute value of the residuals was chosen as it more accurately depicts the difference between the true and estimated probabilities compared to standard residuals. The left column is for the sleep to wake transitions and right for wake to sleep. The rows are for each covariate grouping. Unlike in (CITATION McClintock), accurate state reconstruction occurs at the same number of support points as accurate transition probability estimation. Looking at the left half of figure \ref{NLtran}, for all simulation settings the accuracy plateaus at the same number of support points where the transition residuals go to zero. Similar to before, the bias of the individual HMM is dependent on both H and number of follow-up observations. Depending on the simulation settings, a MHMM outperforms the individual HMM. Across all simulation settings, a MHMM with many support points consistently has the least amount of bias.
+Increasing the number of support points also reduces the bias in the estimated transition matrix. Figure \ref{NLtran} is a NL plot for the $90^{\text{th}}$ percentile of the absolute value of the transition residuals across 100 simulations. As the transition probabilities are simulated as a first order harmonic, the absolute value of the residuals was chosen as it more accurately depicts the difference between the true and estimated probabilities compared to standard residuals. The left column is for the sleep to wake transitions and right for wake to sleep, and the rows are for each covariate grouping. Accurate state reconstruction occurs at the same number of support points as accurate transition probability estimation. This is in contrast to when the RE is in the transition process \cite{mcclintock2021}. Looking at the left half of figure \ref{NLtran}, the accuracy plateaus in figure \ref{NLacc} at the same number of support points where the transition residuals tend to zero. Similar to before, the bias of the individual HMM is dependent on both H and number of follow-up observations. Depending on the simulation settings, a MHMM clearly outperforms the individual HMM. Across all simulation settings, a MHMM with many (between five and eight) support points has the least amount of bias.
 
 \begin{figure}
-    \includegraphics[scale=.65]{Support/MiscParamBox.png}
+    \includegraphics[width=\textwidth]{Support/MiscParamBox.png}
     \centering
-    \caption{Boxplot of wake activity SE by model choice for 100 simulations with 1000 people, one day of follow up, and H = Gamma(1,2)-2. X axis indicates model and Y axis is SE.}
+    \caption{Boxplot of $p_1$ (top left), $\sigma_0$ (top right), $\mu_1$ (middle left), $\sigma_1$ (middle right), $\lambda_0$ (bottom left), and $\lambda_1$ (bottom right) by model choice for 100 simulations with 1000 people, one day of follow up, and where H is a Gamma distribution. X-axis indicates model and Y axis is parameter estimate.}
     \label{miscParam}
 \end{figure}
 
-Although accuracy and transition bias might plateau, increasing the number of support points may reduce the bias of other estimated parameters. Continuing with the same Gamma simulation from the previous paragraph, figure \ref{miscParam} contains information on the following estimated parameters: $p_1$ (top left), $\sigma_0$ (top right), $\mu_1$ (middle left), $\sigma_1$ (middle right), $\lambda_0$ (bottom left), and $\lambda_1$ (bottom right). Looking at the plot for $\sigma_0$, although the accuracy might remain somewhat constant when the number of support points is increased beyond three, the wake SE bias continually decreases. Even with eight support points there is a small amount of bias. In contrast, the individual HMM is not biased. For $p_0,\mu_1,\sigma_1,\lambda_0$ and $\lambda_1$ a MHMM with 3 support points is not biased, however an individual HMM is slightly biased for $\mu_1$ and $\sigma_1$. 
+Although accuracy might plateau, increasing the number of support points reduces the bias of other estimated parameters. Examining the 100 simulations for 1000 people with a day of follow up when H is a Gamma distribution, figure \ref{miscParam} contains information on the following estimated parameters: $p_1$ (top left), $\sigma_0$ (top right), $\mu_1$ (middle left), $\sigma_1$ (middle right), $\lambda_0$ (bottom left), and $\lambda_1$ (bottom right). Looking at the plot for $\sigma_0$, although the accuracy might remain somewhat constant when the number of support points is increased beyond three, the wake SE bias continually decreases. Even with eight support points there is a small amount of bias. In contrast, the individual HMM is not biased when estimating $\sigma_0$, however it is when estimating the sleep emission parameters. 
 
 \begin{figure}
     \includegraphics[scale=.48]{Support/clustmeanmix.png}
     \centering
-    \caption{Cluster mean (top row) and mixing proportion (bottom row) 
-    for number of support points. Each column signifies the number 
-    of support points starting with one on the left and six on the right. 
-    Cluster mean represents $\nu_l=\mu_0+r_l$ and the mixing 
-    proportion is $r_l$. Each boxplot uses data from 100 simulations. }
+    \caption{Scatter plot of mixing proportion ($\pi_l$) by cluster mean ($\nu_l = \mu_0+r_l$) for a MHMM with one through eight support points. Each point represents the median of 100 simulations with 1000 people, one day of follow up, and where H is a Gamma distribution.}
     \label{CMM}
 \end{figure}
 
-Looking closely at the 100 simulations for 1000 people with a day of follow up when H is a Gamma distribution we can get a better sense of how increasing the number of support points increases overall accuracy and reduces bias. This simulation corresponds to the first column of points starting on the left in figure \ref{NLacc}. Figure \ref{CMM} contains information on the cluster mean $(\hat{\nu_l})$ and mixing proportion $(\pi_l)$ for these simulation settings. Each gray box indicates the number of support points used in the MHMM. With one support point (which is equivalent to the shared HMM) we have a cluster at around 3.5 and roughly 55\% accuracy. Using two support points we have clusters at around 1.75 and 4.25 and an accuracy of 75\%. With three support points we have clusters at around 0, 2.75 and 5.25 and an accuracy of 90\%. These new clusters closer to 0, and thus closer to the mean sleep activity, help accurately predict wake when we observe low activity generated by a wake state. As the number of support points increases, a Gamma distribution takes shape in figure \ref{CMM}, however after four support points the accuracy gains and reduction in transition residuals are marginal.
-
-
-\subsection{Discussion}\label{SimStudyDiscussion}
-
-The individual HMM is extremely flexible and is able to capture minute differences in activity, however, it has a number of key drawbacks. A large number of repeated measurements are needed per person to estimate each mean parameter. The model was less accurate and more biased when analyzing one day of follow up compared to the one week of follow up. Additionally, for the one day of follow-up simulations, some individual variances were not able to be estimated. Although the individual wake activity parameters allow for flexible modeling, the number of parameters increases with the number of people. Finally, it is not clear how prediction would work for a new person without re-estimating the entire model as we have no measure of the individual parameters from a population level viewpoint.
-
-Despite the much smaller number of parameters, a MHMM either preforms similarly or better than the individual HMM depending on the number of support points. MHMMs do not require many repeated measurements per person to be accurate and are parsimonious in estimated parameters. MHMMs also naturally cluster the data and therefore are very interpretable when looking on heterogeneity in a population. However, MHMMs are not without their drawbacks. HMMs are much easier to implement as one can rely on off-the-shelf packages. Additionally, there is a trade-off between accuracy and computational time that must be balanced. Standard HMMs are much faster, especially for large amounts of data, taking as much time as a MHMM with two support points. If there are many observations per person, H is known to have a fairly small spread, or algorithm run-time is important, an individual HMM may be better suited than a MHMM. However, for situations with relatively few observations per person or an unknown H, MHMMs provide consistent accuracy. 
-
-Increasing the number of support points increases the accuracy of the state reconstruction and reduces bias, however there are diminishing returns. As the necessary computation time roughly scales linearly with the number of support points, it is pertinent that we choose enough support points to accurately estimate the sequence without significant computational burden. Figure \ref{time} is a nested loop plot showing the median running time in hours. We see that the increasing the number of support points generally increases the median running time. Additionally, for all the simulations barring the t distribution with two degrees of freedom, three to six support points is sufficient for maximum accuracy as there is a steep drop off afterwards. For a t distribution with two degrees of freedom it may be beneficial to use eight support points, despite the increased time. Unlike in McClintock (CITATION), where high accuracy does not necessarily indicate unbiased estimates, when the accuracy plateaus the parameter estimates are minimally biased (except $\sigma_0$).
-
-Although BIC has previously been recommended to choose the number of support points, we have found that it consistently recommends the shared HMM which consistently preformed the worst. We suggest estimating using a MHMM and increasing the number of support points until estimates stabilize. For instance using figure \ref{miscParam} as a reference, we would select three or four support points. Maximum accuracy is achieved with three support points, however the transition probabilities are still biased. Using four support points does not drastically increase the run time and reduces the bias.
-
-\section{Conclusion}
-
-Mixed hidden Markov models are a recent adaptation of HMMs 
-which can account for individual level heterogeneity. In this 
-paper we have shown that when the data is truly generated with 
-a RE in the emissions distribution, a MHMM preforms much better 
-than a HMM for state prediction. As the RE distribution is 
-estimated using nonparametric density estimation, we have also 
-shown that only a small number of support points are needed, 
-where the exact number depends on the underlying continuous 
-RE distribution. When this distribution has a higher variance, 
-more support points are necessary for accurate state estimation. 
-Although increasing the number of support points increases 
-overall accuracy, it also increases the time needed to fit the model. 
-Therefore, a balance must be found between accuracy and 
-computation time. We suggest using two to four support points, 
-as this provides both high accuracy and shorter running times. 
-
+Continuing with the same Gamma simulation, we can get a better sense of how increasing the number of support points increases overall accuracy and reduces bias by looking at figure \ref{CMM}, which plots the mixing proportion $(\pi_l)$ against the cluster mean $(\hat{\nu_l})$. Each gray box indicates the number of support points used in the MHMM. With one support point (which is equivalent to the shared HMM) we have a cluster at around 3.5 and roughly 55\% accuracy. Using two support points we have clusters at around 1.75 and 4.25 and an accuracy of 80\%. With three support points we have clusters at around 0, 2.75 and 5.25 and an accuracy of 90\%. These new clusters closer to 0, and thus closer to the mean sleep activity, help accurately predict wake when we observe low activity generated by a wake state. As the number of support points increases, a Gamma distribution takes shape in figure \ref{CMM}, however after four support points the accuracy gains are marginal.
 
 \begin{figure}
 \includegraphics[scale=.55]{Support/NestedLoopCompTime.png}
 \centering
-\caption{Nested loop plot of simulation results for median 
-running time in hours. Each point is the median of 100 simulations 
-and the color indicates the number of support points. 
-The X axis indicates the simulation settings, which is a 
-combination of days follow-up, number of participants, and RE distribution.}
+\caption{Nested loop plot of simulation results for median run time in hours. Each point is the median of 100 simulations. Color indicates model used. X-axis indicates simulation settings, which is a combination of days follow-up, number of participants, and RE distribution.}
 \label{time}
 \end{figure}
 
+Figure \ref{time} is a NL plot showing the median run time in hours. We see that the increasing the number of support points generally increases the median run time. For all the simulations barring the t distribution with three degrees of freedom, three to six support points is sufficient for maximum accuracy. For a t distribution with three degrees of freedom it may be beneficial to use eight support points, despite the increased time. Unlike for heterogeneity in the hidden process, where high accuracy does not necessarily indicate unbiased parameters \cite{mcclintock2021}, when the accuracy plateaus the parameter estimates are minimally biased (except $\sigma_0$).
+
+
+\subsection{Discussion}\label{SimStudyDiscussion}
+
+Standard HMMs are often faster and easier to implement, however MHMMs may provide higher accuracy given a sufficient number of support points are chosen. Increasing the number of support points reduces bias and increases latent state prediction, however it also increases model run time. In many of the previous simulations, the individual HMM preforms similar to the MHMM. The individual HMM is flexible and is able to capture minute differences in activity between people, however, it has a number of key drawbacks. Many repeated measurements are needed per person to estimate each mean parameter. For instance the model was less accurate and more biased when analyzing one day of follow up compared to the one week of follow up. Additionally, overall accuracy depends on the underlying RE distribution H, which is unlikely to be known. Although the individual wake activity parameters allow for flexible modeling, the number of parameters increases with the number of people.
+
+BIC has previously been proposed for HMM and MHMM model selection \cite{maruotti2009}. We have found that in simulations with one day of follow up the MHMM with 8 support points has the lowest BIC. For one week of follow, up either the MHMM with eight support points or the individual HMM has the lowest BIC, depending on H. If there are many observations per person or minimizing algorithm run-time is important, an individual HMM may be better suited than a MHMM. For situations with relatively few observations per person or in settings where consistent accuracy irrespective of the underlying RE distribution, MHMMs may be preferred. 
+
+As the number of necessary support points appears to depend on H, choosing the number of support points will depend on the overall goal of the model. If state reconstruction or transition probability estimation is the primary goal, then successive MHMMs can be run increasing the number of support points by 1 until the reconstructed sequence is similar between models. If estimation of emission related parameters is more important, then BIC can be used to decide.  
+
+Increasing the number of support points increases the accuracy of the state reconstruction and reduces bias, however there are diminishing returns. As the necessary run time roughly scales linearly with the number of support points, it is pertinent that we choose enough support points to accurately estimate the sequence without significant computational burden. 
+
+\pagebreak
+
+\section{Application}
+
+\section{Discussion}
+
+Despite the much smaller number of parameters, a MHMM preforms similarly or better than the individual HMM depending on the number of support points. MHMMs do not require as many repeated measurements per person to be accurate and require fewer estimated parameters. MHMMs also naturally cluster the data and therefore are very interpretable when examining heterogeneity in a population. However, MHMMs are not without their drawbacks. HMMs are much easier to implement as one can rely on off-the-shelf packages. Additionally, there is a trade-off between accuracy and computational time that must be balanced. Standard HMMs are much faster, especially for large amounts of data. 
 
 \bibliographystyle{unsrt}
 \bibliography{Support/MHMMbib}

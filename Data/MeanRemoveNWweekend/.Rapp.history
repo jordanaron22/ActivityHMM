@@ -1,0 +1,9 @@
+load("/Users/aronjr/Documents/Predoc/ActivityHMM/Data/MeanRemoveNWweekend/Wavedata_G.rda")
+wave_data_G[[]]
+wave_data_G[[1]]
+dim(wave_data_G[[1]])
+wave_data_G[[1]][1,]
+load("/Users/aronjr/Documents/Predoc/ActivityHMM/Data/MeanRemoveNWweekend/Wavedata_H.rda")
+wave_data_H[[1]]
+dim(wave_data_H[[1]])
+96*3
