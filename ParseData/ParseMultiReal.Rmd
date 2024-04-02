@@ -534,6 +534,7 @@ DecodingPlots(132)
 DecodingPlots(9)
 
 DecodingPlots(246)
+DecodingPlots(397)
 
 
 ```
@@ -542,8 +543,8 @@ DecodingPlots(246)
 ```{r}
 n <- dim(act)[2]
 
-# full_data_ind <- which(colSums(!is.na(act)) > 672)
-full_data_ind <- which(colSums(!is.na(act)) > 100)
+full_data_ind <- which(colSums(!is.na(act)) > 96*6)
+# full_data_ind <- which(colSums(!is.na(act)) > 100)
 
 tran_pov_vec2 <- tran_pov_vec[full_data_ind]
 tran_age_vec2 <- tran_age_vec[full_data_ind]
@@ -584,7 +585,7 @@ final_df <- data.frame()
 
 
 # vit_ind <- act_decode_array[c(49:816),ind,model]
-for (model_ind in 9:9){
+for (model_ind in c(1,9)){
   sleep_block_vec <- c()
   sleep_eff_vec <- c()
   sleep_onset_vec <- c()
@@ -644,7 +645,7 @@ for (model_ind in 9:9){
     sleep_block_vec <- c(sleep_block_vec,median(sleep_block_ind_vec,na.rm = T))
     sleep_eff_vec <- c(sleep_eff_vec,median(sleep_eff_ind_vec,na.rm = T))
     sleep_onset_vec <- c(sleep_onset_vec,median(sleep_onset_ind_vec,na.rm = T))
-    sleep_total_vec <- c(sleep_total_vec,sum(sleep_total_ind_vec))
+    sleep_total_vec <- c(sleep_total_vec,sum(sleep_total_ind_vec)/(day_len+1))
   }
   
   
@@ -654,11 +655,11 @@ for (model_ind in 9:9){
                          onset = sleep_onset_vec,
                          totalSleep = sleep_total_vec,
                          pov = tran_pov_vec2,
-                         pov_cont = id$poverty[full_data_ind],
+                         pov_cont = round(id$poverty[full_data_ind],1),
                          age = tran_age_vec2,
                          age_cont = id$age[full_data_ind],
                          race = id$race[full_data_ind],
-                         bmi_cont = id$BMI[full_data_ind],
+                         bmi_cont = round(id$BMI[full_data_ind],0),
                          bmi_disc = id$bmi_disc[full_data_ind],
                          gender = id2$gender[full_data_ind],
                          houseFS = id2$houseFS[full_data_ind],
@@ -680,6 +681,7 @@ sleep_df$gender <- as.factor(sleep_df$gender)
 sleep_df$houseFS <- as.factor(sleep_df$houseFS)
 
 sleep_df$bmi_disc <- as.factor(sleep_df$bmi_disc)
+# sleep_df$bmi_cont <- as.factor(sleep_df$bmi_cont)
 
 
 ```
@@ -689,21 +691,25 @@ sleep_df$bmi_disc <- as.factor(sleep_df$bmi_disc)
 
 sleep_df %>%
     # Specify group indicator, column, function
-    group_by(pov) %>%
+    group_by(modelnum,pov) %>%
     # Calculate the mean of the "Frequency" column for each group
     summarise_at(c("block", "onset", "eff", "totalSleep"), mean, na.rm = TRUE)
 
-ggplot(sleep_df, aes(x=pov, y=block)) + 
-  geom_boxplot()
+ggplot(sleep_df, aes(x=pov, y=block,)) + 
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=pov, y=onset)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=pov, y=eff)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=pov, y=totalSleep)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ```
 
@@ -712,21 +718,25 @@ ggplot(sleep_df, aes(x=pov, y=totalSleep)) +
 
 sleep_df %>%
     # Specify group indicator, column, function
-    group_by(age) %>%
+    group_by(modelnum,age) %>%
     # Calculate the mean of the "Frequency" column for each group
     summarise_at(c("block", "onset", "eff", "totalSleep"), mean, na.rm = TRUE)
 
-ggplot(sleep_df, aes(x=as.factor(age), y=block)) + 
-  geom_boxplot(outlier.shape = NA)
+ggplot(sleep_df, aes(x=as.factor(age), y=block,)) + 
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=as.factor(age), y=onset)) + 
-  geom_boxplot(outlier.shape = NA)
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=as.factor(age), y=eff)) + 
-  geom_boxplot(outlier.shape = NA)
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=as.factor(age), y=totalSleep)) + 
-  geom_boxplot(outlier.shape = NA)
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum)
 
 ```
 
@@ -741,98 +751,240 @@ sleep_df %>%
     summarise_at(c("block", "onset", "eff", "totalSleep"), mean, na.rm = TRUE)
 
 
-ggplot(sleep_df, aes(x=clust, y=pov_cont)) + 
+ggplot(sleep_df %>% filter(modelnum == 9), aes(x=clust, y=pov_cont)) + 
   geom_boxplot()
 
-ggplot(sleep_df, aes(x=clust, y=age_cont)) + 
+ggplot(sleep_df%>% filter(modelnum == 9), aes(x=clust, y=age_cont)) + 
   geom_boxplot(outlier.shape = NA)
 
 
-ggplot(sleep_df, aes(x=clust, y=block)) + 
+ggplot(sleep_df%>% filter(modelnum == 9), aes(x=clust, y=block)) + 
   geom_boxplot()
 
-ggplot(sleep_df, aes(x=clust, y=onset)) + 
+ggplot(sleep_df%>% filter(modelnum == 9), aes(x=clust, y=onset)) + 
   geom_boxplot()
 
-ggplot(sleep_df, aes(x=clust, y=eff)) + 
+ggplot(sleep_df%>% filter(modelnum == 9), aes(x=clust, y=eff)) + 
   geom_boxplot()
 
-ggplot(sleep_df, aes(x=clust, y=totalSleep)) + 
+ggplot(sleep_df%>% filter(modelnum == 9), aes(x=clust, y=totalSleep)) + 
   geom_boxplot()
 
 ```
 
 ```{r}
 ggplot(sleep_df, aes(x=gender, y=block)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=gender, y=onset)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=gender, y=eff)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=gender, y=totalSleep)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 
-
-
-ggplot(sleep_df, aes(x=houseFS, y=block)) + 
-  geom_boxplot()
-
-ggplot(sleep_df, aes(x=houseFS, y=onset)) + 
-  geom_boxplot()
-
-ggplot(sleep_df, aes(x=houseFS, y=eff)) + 
-  geom_boxplot()
-
-ggplot(sleep_df, aes(x=houseFS, y=totalSleep)) + 
-  geom_boxplot()
 
 
 ggplot(sleep_df, aes(x=bmi_disc, y=block)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=bmi_disc, y=onset)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=bmi_disc, y=eff)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=bmi_disc, y=totalSleep)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
 
 
 ```
 
 ```{r}
-sleep_df %>%
-    # Specify group indicator, column, function
-    group_by(age) %>%
-    # Calculate the mean of the "Frequency" column for each group
-    summarise_at(c("block", "onset", "eff", "totalSleep"), mean, na.rm = TRUE)
-
-ggplot(sleep_df, aes(x=as.factor(age_cont), y=block)) + 
-  geom_boxplot(outlier.shape = NA)
+nre.labs <- c("Individual HMM", "MHMM8 ")
+names(nre.labs) <- c(1,9)
+  
 
 ggplot(sleep_df, aes(x=as.factor(age_cont), y=onset)) + 
-  geom_boxplot(outlier.shape = NA)
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum,
+             labeller = labeller(modelnum = nre.labs)) + 
+  scale_x_discrete(breaks = seq(10,70,10))
 
-ggplot(sleep_df, aes(x=as.factor(age_cont), y=eff)) + 
-  geom_boxplot(outlier.shape = NA)
 
 ggplot(sleep_df, aes(x=as.factor(age_cont), y=totalSleep)) + 
-  geom_boxplot(outlier.shape = NA)
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum,
+             labeller = labeller(modelnum = nre.labs)) + 
+  scale_x_discrete(breaks = seq(10,70,10))
+
+ggplot(sleep_df, aes(x=as.factor(age_cont), y=eff)) + 
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum)
+
+ggplot(sleep_df, aes(x=as.factor(age_cont), y=totalSleep)) + 
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum)+ scale_x_discrete(breaks = seq(10,70,10))
 
 ggplot(sleep_df, aes(x=clust, y=age_cont)) + 
-  geom_boxplot(outlier.shape = NA)
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=clust, y=bmi_cont)) + 
-  geom_boxplot(outlier.shape = NA)
+  geom_boxplot(outlier.shape = NA)+
+  facet_wrap(~modelnum)
 
 ggplot(sleep_df, aes(x=bmi_disc, y=eff)) + 
-  geom_boxplot()
+  geom_boxplot()+
+  facet_wrap(~modelnum)
+
+```
+
+```{r}
+library(lubridate)
+library(zoo)
+
+
+GetRollDF  <- function(var){
+  roll_df <- data.frame()
+  for (model_num in c(1,9)){
+    roll <- 5
+    lower_age <- 3 + floor(roll/2)
+    upper_age <- 80 - floor(roll/2)
+    
+    line_df <- sleep_df %>% 
+      filter(modelnum == model_num ) %>%
+      group_by(age_cont) %>%
+      summarise_at(c("block", "onset", "eff", "totalSleep"), quantile, probs = c(.05), na.rm = TRUE)
+    
+    
+    roll_df_working <- data.frame(age = c(lower_age:upper_age),
+                          modelnum = model_num)
+    
+    if (var == "onset"){
+      roll_df_working <- roll_df_working %>% mutate(Q05 = seconds_to_period(900 * rollmean(pull(line_df, var),roll)))
+    } else if (var == "totalSleep"){
+      roll_df_working <- roll_df_working %>% mutate(Q05 = (1/60) * 15 * rollmean(pull(line_df, var),roll))
+    } else {
+      roll_df_working <- roll_df_working %>% mutate(Q05 = rollmean(pull(line_df, var),roll))
+    }
+    
+    
+    line_df <- sleep_df %>% 
+      filter(modelnum == model_num ) %>% 
+      group_by(age_cont) %>%
+      summarise_at(c("block", "onset", "eff", "totalSleep"), quantile, probs = c(.5), na.rm = TRUE)
+    
+    if (var == "onset"){
+      roll_df_working <- roll_df_working %>% mutate(Median = seconds_to_period(900 * pull(line_df, var) %>% rollmean(roll)))
+    } else if (var == "totalSleep"){
+      roll_df_working <- roll_df_working %>% mutate(Median = (1/60) * 15 * pull(line_df, var) %>% rollmean(roll))
+    } else {
+      roll_df_working <- roll_df_working %>% mutate(Median = pull(line_df, var) %>% rollmean(roll))
+    }
+    
+    line_df <- sleep_df %>% 
+      filter(modelnum == model_num ) %>% 
+      group_by(age_cont) %>%
+      summarise_at(c("block", "onset", "eff", "totalSleep"), quantile, probs = c(.95), na.rm = TRUE)
+    
+    
+    
+    
+    if (var == "onset"){
+      roll_df_working <- roll_df_working %>% mutate(Q95 = seconds_to_period(900 * pull(line_df, var) %>% rollmean(roll)))
+    } else if (var == "totalSleep"){
+      roll_df_working <- roll_df_working %>% mutate(Q95 = (1/60) * 15 * pull(line_df, var) %>% rollmean(roll))
+    } else {
+      roll_df_working <- roll_df_working %>% mutate(Q95 = pull(line_df, var) %>% rollmean(roll))
+    }
+    
+    
+    roll_df <- rbind(roll_df,roll_df_working)
+  }
+  
+  if (var == "onset"){
+    roll_df[,3] <- as.Date(roll_df[,3])
+    roll_df[,4] <- as.Date(roll_df[,4])
+    roll_df[,5] <- as.Date(roll_df[,5])
+  }
+    
+  return(roll_df)
+}
+
+
+
+
+nre.labs <- c("Individual HMM", "MHMM8 ")
+names(nre.labs) <- c(1,9)
+  
+
+roll_df <- GetRollDF("onset")
+ggplot(data=roll_df, aes(x=age, y=Median))  + 
+  geom_line(aes(col = as.factor(modelnum))) + 
+  geom_ribbon(aes(ymin=Q05, ymax=Q95, fill = as.factor(modelnum)), linetype=1, alpha=0.3)+
+  labs(x = "Age", y = "Sleep Onset",
+       title = "Sleep Onset by Age for Individual and Mixed HMM",
+       fill = "Model",
+       col = "Model") + 
+  scale_color_viridis(discrete=TRUE,end = .8,
+                      labels=c("1" = "Ind HMM", "9"="MHMM8"))+
+  scale_fill_viridis(discrete=TRUE,end = .8,
+                     labels=c("1" = "Ind HMM", "9"="MHMM8"))+
+  theme_bw()
+
+# setwd("../Plots/")
+# ggsave("RealOnset.png",scale = 1)
+
+
+roll_df <- GetRollDF("eff")
+ggplot(data=roll_df, aes(x=age, y=Median))  + 
+  geom_line(aes(col = as.factor(modelnum))) + 
+  geom_ribbon(aes(ymin=Q05, ymax=Q95, fill = as.factor(modelnum)), linetype=1, alpha=0.3)+
+  labs(x = "Age", y = "Sleep Efficiency",
+       title = "Sleep Efficiency by Age for Individual and Mixed HMM",
+       fill = "Model",
+       col = "Model") + 
+  scale_color_viridis(discrete=TRUE,end = .8,
+                      labels=c("1" = "Ind HMM", "9"="MHMM8"))+
+  scale_fill_viridis(discrete=TRUE,end = .8,
+                     labels=c("1" = "Ind HMM", "9"="MHMM8"))+
+  theme_bw()
+
+
+# setwd("../Plots/")
+# ggsave("RealEff.png",scale = 1)
+roll_df <- GetRollDF("totalSleep")
+ggplot(data=roll_df, aes(x=age, y=Median))  + 
+  geom_line(aes(col = as.factor(modelnum))) + 
+  geom_ribbon(aes(ymin=Q05, ymax=Q95, fill = as.factor(modelnum)), linetype=1, alpha=0.3)+
+  labs(x = "Age", y = "Daily Total Sleep",
+       title = "Daily Total Sleep by Age for Individual and Mixed HMM",
+       fill = "Model",
+       col = "Model") + 
+  scale_color_viridis(discrete=TRUE,end = .8,
+                      labels=c("1" = "Ind HMM", "9"="MHMM8"))+
+  scale_fill_viridis(discrete=TRUE,end = .8,
+                     labels=c("1" = "Ind HMM", "9"="MHMM8"))+
+  theme_bw()
+
+# setwd("../Plots/")
+# ggsave("RealTotal.png",scale = 1)
+
+
+
+
 
 ```
 
@@ -844,25 +996,39 @@ ggplot(sleep_df, aes(x=bmi_disc, y=eff)) +
 load("/Users/aronjr/Documents/Predoc/ActivityHMM/ParseData/MeanRemovedNWAge/MHMM0.rda")
 
 
-km <- kmeans(params_to_save[[7]][1,1,],centers = 8,algorithm="Lloyd",iter.max = 1000)
+km <- kmeans(params_to_save[[7]][1,1,],
+             centers = 4,algorithm="Lloyd",iter.max = 1000)
+
 centers <- sort(km$centers)
-km <- kmeans(params_to_save[[7]][1,1,],centers = centers,algorithm="Lloyd",iter.max = 10)
+
+km <- kmeans(params_to_save[[7]][1,1,],
+             centers = centers,algorithm="Lloyd",iter.max = 10)
 
 km$centers
-act_est_array[[8]][1,1,]
+act_est_array[[9]][1,1,]
 
 
-sleep_df <- sleep_df%>% mutate(kgroup = as.factor(km$cluster[full_data_ind]))
+sleep_df9 <- sleep_df %>% filter(modelnum == 9) %>% mutate(kgroup = as.factor(km$cluster[full_data_ind]))
 
-ggplot(sleep_df, aes(x=clust, y=age_cont)) + 
+ggplot(sleep_df9, aes(x=clust, y=age_cont)) + 
   geom_boxplot(outlier.shape = NA)
 
-ggplot(sleep_df, aes(x=kgroup, y=age_cont)) + 
+ggplot(sleep_df9, aes(x=kgroup, y=age_cont)) + 
   geom_boxplot(outlier.shape = NA)
 
-ggplot(sleep_df, aes(x=clust, y=bmi_cont)) + 
+ggplot(sleep_df9, aes(x=clust, y=bmi_cont)) + 
   geom_boxplot(outlier.shape = NA)
 
-ggplot(sleep_df, aes(x=kgroup, y=bmi_cont)) + 
+ggplot(sleep_df9, aes(x=kgroup, y=bmi_cont)) + 
   geom_boxplot(outlier.shape = NA)
+
+table(sleep_df9$clust,sleep_df9$kgroup)
+```
+
+```{r}
+library(mclust, quietly=TRUE)
+fit = Mclust(params_to_save[[7]][1,1,], G=8, model="V")
+
+
+table(sleep_df9$clust,fit$classification[full_data_ind])
 ```

@@ -3,7 +3,7 @@ sim_num <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
 if (is.na(sim_num)){sim_num <- 99}
 
 
-real_data <- F
+real_data <- T
 
 epsilon <- 1e-5
 # epsilon <- 1e-100
@@ -1248,6 +1248,11 @@ CalcMeansWake <- function(act,weights_array){
       denom <- denom + sum(weights_array[inds_keep,ind,re_index])
     }
     mean_vec[re_index] <- num/denom
+    
+    if(mean_vec[re_index] < emit_act[2,1,1]){
+      mean_vec[re_index] <- emit_act[2,1,1]
+      print("Wake < Sleep")
+    }
   }
   return(mean_vec)
 }
@@ -1443,9 +1448,16 @@ readCpp("/panfs/jay/groups/29/mfiecas/aron0064/ActHMM/Rcode/cFunctions.cpp")
 #### Set True Parameters ####
 central_mean <- wake_params[1]
 
+if (real_data){
+  var_factor <- RE_num %/% 2 
+  re_set <- seq(-2,2*var_factor,length.out = RE_num) *2/3
+  
+} else {
+  var_factor <- RE_num %/% 2 * runif(1,.8,1.2)
+  re_set <- seq(-2*var_factor,2*var_factor,length.out = RE_num) * runif(RE_num,.65,.85)
+}
 
-var_factor <- RE_num %/% 2 * runif(1,.8,1.2)
-re_set <- seq(-2*var_factor,2*var_factor,length.out = RE_num) * runif(RE_num,.65,.85)
+  
 
 pi_l_true <- rep(1/RE_num,RE_num)
 if(RE_num == 0){pi_l_true <- c(1)}
@@ -1586,10 +1598,10 @@ if(real_data){
                                            BMI > 40 ~ 6))
   
   #CHANGE POV AND AGE
-  covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$bmi_disc))
+  covar_mat_tran <- matrix(0,ncol = 6, nrow = length(id$age_disc))
   covar_mat_tran[,1] <- 1
-  for (i in 1:length(id$bmi_disc)){
-    covar_mat_tran[i,id$bmi_disc[i]] <- 1
+  for (i in 1:length(id$age_disc)){
+    covar_mat_tran[i,id$age_disc[i]] <- 1
   } 
   
   
@@ -1850,7 +1862,7 @@ if (!real_data){
   est_params <- list(init,params_tran,emit_act,act_light_binom,pi_l,re_prob)
   params_to_save <- list(est_params,likelihood_vec,decoded_mat,starting_conditions,Tran2DF(params_tran),IC,emit_act_array)
   
-  save(params_to_save,file = paste0("bmiMHMM",RE_num,".rda"))
+  save(params_to_save,file = paste0("meanMHMM",RE_num,".rda"))
 }
 
 

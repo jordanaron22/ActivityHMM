@@ -17,7 +17,7 @@
 
 %\renewcommand{\includegraphics}[2][]{}
 
-\title{Practical Concerns for Estimating Mixed Hidden Markov Models}
+\title{Practical Concerns for Estimating Mixed Hidden Markov Models with an Application to NHANES}
 \author{}
 \date{}
 
@@ -29,52 +29,21 @@
 
 \section{Introduction}
 
-The circadian rhythm plays a wide-ranging role in human health, from regulating important metabolomic pathways \cite{potterCircadianRhythmSleep2016} to immune response \cite{sharmaCircadianRhythmDisruption2016}. 
-Disruption of the circadian rhythm is associated with a variety of negative health outcomes. 
-For instance, sleep disruption related to shift work is most likely carcinogenic \cite{iarc2010}.
-Polysomnography (PSG) is the gold standard when evaluating certain sleep disorders, however PSG is both costly and inconvenient for the patient\cite{chervin1999}. 
-Requiring an overnight study at a specific heath care facility, there has been considerable interest in finding a cost-effective replacement.  As PSG is not readily available it is difficult to amass population level data. 
+The circadian rhythm plays a wide-ranging role in human health, from regulating important metabolomic pathways \cite{potterCircadianRhythmSleep2016} to immune response \cite{sharmaCircadianRhythmDisruption2016}. Disruption of the circadian rhythm is associated with a variety of negative health outcomes. For instance, sleep disruption related to shift work is most likely carcinogenic \cite{iarc2010}. Polysomnography (PSG) is the gold standard when evaluating certain sleep disorders, however PSG is both costly and inconvenient for the patient\cite{chervin1999}. Requiring an overnight study at a heath care facility, there has been considerable interest in finding a cost-effective replacement that can amass population level data. 
 
-The proliferation of personal physical activity monitors (PAM) offers an interesting insight into sleep health. 
-Actigraphy has proven to be useful in assessing circadian rhythm disorders \cite{morgenthaler2007} and has some distinct advantages over PSG. 
-PAMs collect a large amount of data over a longer period of time. As 
-they are relatively inexpensive, we can collect more data on more people compared to PSG.  
-Although this is an exciting opportunity, there are challenges. Actigraphy measures movement, not sleep. We can reconstruct the sleep cycle from actigraphy data, however we cannot measure the different stages nor the subjective experience of sleep. 
-In addition, constraints of wearable devices must also be considered \cite{imtiaz2021}, such as detection limit issues. 
+The proliferation of personal physical activity monitors (PAM) offers an interesting insight into sleep health. Actigraphy has proven to be useful in assessing circadian rhythm disorders \cite{morgenthaler2007} and has some distinct advantages over PSG. PAMs collect a large amount of data over a longer period of time. As they are relatively inexpensive, we can collect more data on more people compared to PSG. 
 
-Although there is a clear connection between activity and sleep, the specific relationship is difficult to ascertain. 
-High activity periods most likely indicate an underlying wake state, however periods of inactivity may be hard to classify. 
-Activity data may look similar for sedentary wake activities and sleep (e.g. watching TV may appear similar sleeping). 
-During periods of very low activity, measurements may be below the limit of detection (LoD). 
-We propose to use an extension of a hidden Markov model (HMM) to capture this behavior. 
-The observed data will be the activity measurements from the PAM and the hidden Markov state will be the unobserved wake/sleep status.
+The National Health Examination Survey (NHANES) is a collection of studies aiming to quantify the health of US civilians. Beginning in 1960, NHANES become a yearly study in 1999 where specific goals change year-to-year to focus on emerging issues. For the 2011-2012 and 2013-2014 waves, a representative sample of the US were given a wrist physical activity monitor (PAM) for 9 days. Among other metrics, these PAMs measured physical activity by the minute. This data offers a unique glimpse into the circadian rhythm for the US population.
 
-HMM Actigraphy PARA
+Although this is an exciting opportunity, there are challenges. PAMs measures movement, not sleep, and although there is a clear connection between the two, the specific relationship is difficult to ascertain. High activity periods most likely indicate an underlying wake state, however periods of inactivity may be hard to classify. Activity data may look similar for sedentary wake activities and sleep (e.g. watching TV may appear similar sleeping). In addition, there is often a large presence of zeros in the observed data due to very low activity. We propose to use an extension of a hidden Markov model (HMM) to capture this behavior. The observed data will be the activity measurements from the PAM and the Markov state will be the unobserved wake/sleep status.
 
-As physical activity is not uniform among people \cite{hootman2003}, any study utilizing population level actigraphy data must account for this. 
-Previously this issue has been handled by either extending the Markov state space from wake and sleep to high activity wake, low activity wake, and sleep or by estimating the emission parameters independently for each person. 
-In the first scenario, active people would spend a larger proportion of their wake time in the high activity wake state compared to the low activity wake state. 
-This solution may cause more problems than it solves as there is no agreed upon cut off for what constitutes low/high activity. 
-Additionally, this greatly increases the complexity of adding important covariates to the Markov transition matrix. 
-Estimating a 3x3 transition matrix is much more difficult than a 2x2, causing feasibility issues when large amounts of data are used. 
-For the second approach, although estimating the emission parameters independently allows a greater fit this too causes more issues than it solves. 
-As the number of participants increases so too does the number of parameters. 
-For datasets that do not have a large number of repeated measurements for each person this approach will not work. 
-Lastly, it is not clear how this can be extrapolated to new data without re-estimation. 
-Instead, we propose a mixed HMM (MHMM) \cite{Altman2007} with an individual level random effect for the activity data in the wake state. 
-This allows people to have different levels of activity while keeping the interpretable and computation friendly two state structure.
-We use a non-parametric approach to estimate this heterogeneity as there is little precedent on how activity is distributed across the US population and we did not want to assume any particular distribution.
+In recent years HMMs have been applied numerous times to actigraphy data \cite{Liu2020a,Boeker2021} as they have been shown to be fairly accurate \cite{Li2020,Witowski2014}. A HMM has been run before on the NHANES actigraphy data \cite{Xu2022,Su2022}, however with a homogenous transition matrix. Non-homogenous transition matrices have been used, however the sample size is often limited \cite{Ogbagaber2024,Huang2018a} as there is no closed form solution for estimating the transition probabilities. Heterogeneity is important to model as both sleep parameters and activity levels depend on a variety of factors \cite{etindele2022,Salvo2015,mitchell2017}. 
 
-The National Health Examination Survey (NHANES) is a collection of studies aiming to quantify the health of US civilians. 
-Beginning in 1960, NHANES become a yearly study in 1999 where specific goals change year-to-year to focus on emerging issues. 
-For two years in the mid 2010s, a representative sample for the US of 5,000 participants (for a total of 10,000) were given a wrist physical activity monitor (PAM) for 9 days. 
-Among other metrics, these PAMs measured physical activity by the minute. 
-This data offers a unique glimpse into the circadian rhythm for the US population as a whole.
+Physical activity is not uniform among the US population \cite{hootman2003} and this person-to-person variability must be accounted for in any HMM. Previously this issue has been handled by estimating individual level parameters, however as the number of participants increases so too does the number of parameters. For datasets that do not have a large number of repeated measurements per person this approach will not work. Another approach extends the Markov state space from wake and sleep to high activity, low activity, and rest \cite{Huang2018a,Boeker2021}. This solution may cause more problems than it solves as it complicates the interpretation of the latent states. Additionally, this increases the complexity of adding important covariates to the Markov transition matrix. Estimating a 3x3 transition matrix is much more difficult than a 2x2, causing feasibility issues when large amounts of data are used. 
 
-This project focuses on practical concerns for estimation of a MHMM, with a focus on guidelines for estimating MHMMs. 
-Specifically, we aim to answer whether a MHMM is necessary for state reconstruction, or if a HMM is sufficient. 
-If a MHMM is necessary, we discuss how many support points are needed for the nonparametric density estimation for the emission distribution random effect (RE). 
-Afterwards we apply a MHMM to the NHANES physical activity data.
+We propose a mixed HMM (MHMM) \cite{altmanMixedHiddenMarkov2007, maruotti2009,maruottiMixedHiddenMarkov2011} with an individual level random effect (RE) for the activity data in the wake state and a non-homogenous transition matrix with additional age covariates. A MHMM for actigraphy data has been propored before, however the RE was in the latent transition process \cite{Duroy2020}. The RE in the emission distribution allows people to have different levels of activity while keeping the interpretable and computation friendly two state structure. The non-homogenous transition matrix accounts for the cyclical circadian rhythm. The inclusion of age as a covariate in the transition probabilities accounts for additional heterogeneity in the latent process. We use a non-parametric approach to estimate the heterogeneity in the emission distribution as there is little precedent on how activity is distributed across the US population.
+
+As a MHMM with a RE in the emission distribution has not been applied to actigraphy data previously, it is not clear whether it confers any advantage over standard HMMs. Akin to the investigation by McClintock \cite{mcclintock2021}, we provide a simulation study to determine the usefulness of a MHMM in this setting. Specifically, we aim to answer whether a MHMM is necessary for state reconstruction, or if a HMM is sufficient. Additionally, we discuss how many support points are needed for the nonparametric density estimation for the emission distribution RE for a MHMM. Afterwards we apply a standard HMM and MHMM to the NHANES physical activity data.
 
 \section{Methods} \label{Methods}
 \subsection{Notation}
@@ -110,7 +79,7 @@ where we sum over the number of support points, L, instead of integrating over t
 
 \subsubsection{EM Algorithm}
 
-The EM algorithm is an iterative technique to preform maximum likelihood estimation in the presence of latent variables \cite{Baum1970}. Each iteration of the algorithm alternates between an expectation (E) and maximization (M) step, where the likelihood increases each iteration. Once this increase becomes sufficiently small, we consider the algorithm converged and stop. For the E step, we calculate the expected value of the full data log likelihood conditional on the observed data. We then maximize this expectation in the M step. The complete data likelihood, written down as if we knew the latent variables that are required for estimation, is: 
+The EM algorithm is an iterative technique to preform maximum likelihood estimation in the presence of latent variables \cite{dempster1977}. Each iteration of the algorithm alternates between an expectation (E) and maximization (M) step, where the likelihood increases each iteration. Once this increase becomes sufficiently small, we consider the algorithm converged and stop. For the E step, we calculate the expected value of the full data log likelihood conditional on the observed data. We then maximize this expectation in the M step. The complete data likelihood, written down as if we knew the latent variables that are required for estimation, is: 
 
 \begin{equation*}\label{cdata}
 \begin{split}
@@ -140,7 +109,7 @@ where I() is an indicator variable equal to 1 of the inside expression is true a
 To calculate this, we use a modified version of the forward-backward algorithm, detailed in the next section.
 
 \subsubsection{Forward-backward Algorithm}
-To account for the random effect in the emission distribution we use a modified version of the forward-backward algorithm that conditions on the discrete RE for person $i$ \cite{Maruotti2011}. The forward and backward quantities are $\alpha_{it}(j,r_l) = P(a_{i1}, ..., a_{it}, S_{it} = j | b_i=r_l)$ and $\beta_{it}(j,r_l) =  P(a_{it+1}, ..., a_{iT} | S_{it} = j,b_i=r_l)$, respectively. These quantities are calculated as: 
+To account for the random effect in the emission distribution we use a modified version of the forward-backward algorithm that conditions on the discrete RE for person $i$ \cite{maruottiMixedHiddenMarkov2011}. The forward and backward quantities are $\alpha_{it}(j,r_l) = P(a_{i1}, ..., a_{it}, S_{it} = j | b_i=r_l)$ and $\beta_{it}(j,r_l) =  P(a_{it+1}, ..., a_{iT} | S_{it} = j,b_i=r_l)$, respectively. These quantities are calculated as: 
  
 \begin{equation} \label{fwd}
     \alpha_{it}(j,r_l) = \begin{cases}
@@ -315,7 +284,7 @@ Increasing the number of support points also reduces the bias in the estimated t
 \begin{figure}
     \includegraphics[width=\textwidth]{Support/MiscParamBox.png}
     \centering
-    \caption{Boxplot of $p_1$ (top left), $\sigma_0$ (top right), $\mu_1$ (middle left), $\sigma_1$ (middle right), $\lambda_0$ (bottom left), and $\lambda_1$ (bottom right) by model choice for 100 simulations with 1000 people, one day of follow up, and where H is a Gamma distribution. X-axis indicates model and Y axis is parameter estimate.}
+    \caption{Boxplot of $p_1$ (top left), $\sigma_0$ (top right), $\mu_1$ (middle left), $\sigma_1$ (middle right), $\lambda_0$ (bottom left), and $\lambda_1$ (bottom right) by model choice for 100 simulations with 1000 people, one day of follow up, and where H is a Gamma distribution. X-axis indicates model and Y axis is parameter estimate. The dashed horizontal line is the true parameter value.}
     \label{miscParam}
 \end{figure}
 
@@ -354,9 +323,29 @@ Increasing the number of support points increases the accuracy of the state reco
 
 \section{Application}
 
-\section{Discussion}
+HMMs for actigraphy data typically allow for individual wake emission distribution parameters. Although this can account for person-to-person variability, this approach would not be able to incorporate the necessary NHANES sample weights. Our models run on the entire data set and allow for heterogeneity in both the emission distribution and the state transition process. Different levels of wake activity are allowed described by section \ref{Methods}. Age is included as a covariate in the transition probabilities as it has shown to be an important factor impacting sleep \cite{Redline2004,Boselli1998}. Age has been discretized into the following six categories: less than 11, 11-20, 21-35, 36-50, 51-65, greater than 65. Additionally, we included harmonic terms in the transition calculations to account for the cyclical nature of the circadian rhythm. As NHANES is a nationally representative sample, by running the models on the population as a whole we can calculate HMM parameters for the entire sample. 
+
+For the 2011-2012 and 2013-2014 waves, participants were given an ActiGraph (model GT3X+) for nine days which measured triaxial movement summaries by the minute in open source MIMS units \cite{Dinesh2019}. Minute data was removed (as if missing) when a quality flag was present, triaxial movement was negative, or the PAXPRED variable predicted non-wear. To reduce the computational burden, the median of each 15-minute period was used. Sample weights were included in the likelihood \cite{Karchin1998} to account for the complex sample design. 
+
+We applied both the individual HMM and MHMM with eight support points to NHANES actigraphy data to illustrate the differences (or lack therof) in the models. The MHMM with eight support points was chosen as it had the lowest BIC of all MHMMs fit. After estimation the Viterbi algorithm was used to predict the most likely sequence of wake/sleep states. As we do not have access to the same information often included in sleep studies (e.g. time spent in bed), alternaive metrics must be used. From the Viterbi sequence we can calculate the following sleep summary measures: longest sleep block, time of sleep onset, sleep efficiency, and daily total sleep \cite{Su2022}. The longest sleep block was calculated as the longest block of sleep from 12:00pm to 12:00pm on the following day that was interuptted by no more than a continuous 1.5 hours of wake. Time of onset is defined as the start time of the longest sleep block. Sleep efficiency is defined as the length of sleep during the longest sleep block divided by the length of the longest sleep block. Daily total sleep time is defined as the total amount of sleep between 12:00pm and 12:00pm on the following day.
+
+\subsection{Results and Discussion}
+
+We examined time of sleep onset, sleep efficiency, and total sleep by plotting the metrics against age, BMI, ratio of household income to poverty line, race, and gender. We see in figure NUM that sleep onset is early when young, peaks at around age 20 and then decreases with age. Daily total sleep is high when young, decreases and remains fairly constant from 20-40, and then increases afterwards. These findings are consistent with \cite{Su2022}, however we did not observe any differences in sleep efficiency by age. The results are very similar between the individual HMM and the MHMM with eight support points. There did not appear to be any relationship between the sleep metrics and the remaining sociodemographic variables. 
+
+Despite a lower BIC compared to the individual HMM, one benefit of the MHMM is that it implicitely categorizes heterogeneity in the emission distribution. The MHMM clusters differ from a k-means clustering of the mean wake activity parameters from the individual HMM. The MHMM 
+
+CLUST PARA
+
+As a sensitivity analysis we have addionally fit the models using BMI (less than 18.5, 18.5-25, 25-30, 30-35, 35-40, greater than 40) and household income ratio to the poverty line (0-1, 1-2, 2-3, 3-4, 4-5, greater than 5) as the covariates in the transition process with similar results. 
+
+
+
+\section{Discussion and Conclusion}
 
 Despite the much smaller number of parameters, a MHMM preforms similarly or better than the individual HMM depending on the number of support points. MHMMs do not require as many repeated measurements per person to be accurate and require fewer estimated parameters. MHMMs also naturally cluster the data and therefore are very interpretable when examining heterogeneity in a population. However, MHMMs are not without their drawbacks. HMMs are much easier to implement as one can rely on off-the-shelf packages. Additionally, there is a trade-off between accuracy and computational time that must be balanced. Standard HMMs are much faster, especially for large amounts of data. 
+
+As state reconstruction is often the goal when applying HMMs to actigraphy data, a MHMM may be preferred over an individual HMM when the length of time is relatively short, such as when analyzing weekend data. As most actigraphy applications have long follow-up lengths, a standard HMM is easier to implement and produces very similar predictions. SENTENCE ABOUT CLUSTERING
 
 \bibliographystyle{unsrt}
 \bibliography{Support/MHMMbib}
