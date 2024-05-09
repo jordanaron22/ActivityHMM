@@ -205,7 +205,7 @@ ParseSingleSim <- function(path){
 }
 
 
-path_size <- "/Users/aronjr/Documents/Predoc/ActivityHMM/ParseSims/Sim/Gamma/Size1"
+path_size <- "/Users/aronjr/Documents/Predoc/ActivityHMM/ParseSims/Sim/Gamma/Size4"
 SingleSim <- ParseSingleSim(path_size)  
 
 
